@@ -153,11 +153,12 @@ Every generator turn preserves the total twist modulo 3: every turn leaves $\sum
 This section indexes cubies by the internal indices 0 through 6, and $o_i$ keeps the meaning fixed in section 2: the internal orientation `state_t.o[i]`. A physical state is valid if and only if it satisfies two invariants:
 
 1. Permutation validity: the seven entries of `state_t.p` form a bijection of the internal cubie indices $\{0, 1, 2, 3, 4, 5, 6\}$, which are the report's cubies 1 through 7 shifted down by one.
+
 2. Orientation constraint: every internal orientation $o_i \in \{0, 1, 2\}$, and the sum across all cubies is divisible by 3:
 
-$$
-\sum_{i=0}^6 o_i \equiv 0 \pmod 3
-$$
+   $$
+   \sum_{i=0}^6 o_i \equiv 0 \pmod 3
+   $$
 
 Because the orientation sum is constrained modulo 3, the orientation of the 7th cubie is uniquely determined by the first 6:
 
@@ -169,25 +170,19 @@ $$
 
 The state is encoded into a dense integer in the range $[0, 3{,}674{,}160)$ using two rank components:
 
-1. Permutation Lehmer rank ($p \in [0, 7!)$), computed with the factoradic numeral system:
+1. Permutation Lehmer rank ($`p \in [0, 7!)`$), computed with the factoradic numeral system:
 
-   $$
-   p = \sum_{i=0}^6 c_i \times (6 - i)!, \quad c_i = \sum_{j=i+1}^6 [s.p[j] < s.p[i]]
-   $$
+   $$p = \sum_{i=0}^6 c_i \times (6 - i)!, \quad c_i = \sum_{j=i+1}^6 [s.p[j] < s.p[i]]$$
 
    `rank_state` evaluates this by Horner's rule, `p = p * (7 - i) + c_i`, which needs no factorial table and keeps every partial value below 5,040.
 
-2. Orientation rank ($o \in [0, 3^6)$), evaluated as a base-3 integer over the first 6 orientations:
+2. Orientation rank ($`o \in [0, 3^6)`$), evaluated as a base-3 integer over the first 6 orientations:
 
-   $$
-   o = \sum_{i=0}^5 s.o[i] \times 3^{5 - i}
-   $$
+   $$o = \sum_{i=0}^5 s.o[i] \times 3^{5 - i}$$
 
 3. Composite rank:
 
-   $$
-   \text{rank} = p \times 729 + o
-   $$
+   $$\text{rank} = p \times 729 + o$$
 
 This encoding is a bijection between valid physical configurations and array indices in $[0, 3{,}674{,}160)$. Valmari [3] treats this same puzzle as a case study in how far a dense encoding can shrink the table, and reaches the same conclusion that the orientation of the last cubie is redundant. `unrank_state` inverts it: it peels factoradic digits off $p$ against a shrinking list of unused cubies, reads the six base-3 digits of $o$, and recomputes the seventh orientation from the parity constraint. The executable self-test checks the round trip on every one of the 3,674,160 ranks.
 
