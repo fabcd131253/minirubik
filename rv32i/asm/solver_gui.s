@@ -3339,7 +3339,7 @@ print_end:
 #
 # 轉動：與 solver_simple.c 相同的 FROM/SPIN 模型，多一個固定不動的位置 7（UFL）。
 
-    .equ RENDER_DELAY, 200000           # 每張圖之後的延遲迴圈次數（每次 2 條指令），依模擬速度調整
+    .equ RENDER_DELAY, 200000           # 每張圖之後的延遲迴圈次數（每次 3 條指令），依模擬速度調整
     .equ RENDER_DUMP, 0                 # 1：每張圖之後把 LED 內容印成文字（測試用）
 
     .data
@@ -3440,7 +3440,7 @@ render_read:
     li   s2, 0                          # s2：已套用的步數
 render_move:
     beq  s2, s1, render_return
-    la   t0, moves
+    la   t0, moves                      # from solver.s
     add  t0, t0, s2
     lbu  t1, 0(t0)                      # move（0..8）
     li   s3, 0                          # s3 = move / 3（面），用減法
