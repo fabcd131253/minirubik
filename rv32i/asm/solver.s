@@ -14,13 +14,14 @@
 # 這個 Ripes 版本不支援 .if，所以沒有條件組譯；LED renderer 尚未實作。
 #
 # 搜尋時的暫存器（search 內部）：
-#   s0 d：目前這一層的深度        s1 bound            s2 next_bound
+#   s0 d：目前這一層的深度        s1 limit = bound - g（g = d + 1）   s2 這一輪最小的超出量
 #   s3 目前這一層 frame 的位址    s4 moves 陣列        s5 p、s6 o：這一層的狀態
 #   s7 face：正在試的面（-1 表示還沒開始）              s8 turn：這一面已轉幾次（3 = 換面）
 #   s9 last_face：走到這一層的那一面（根節點為 3）        s10 tp、s11 to：轉動後的狀態
-#   a6、a7：目前這一面的 perm_qt、ori_qt 基底位址
+#   a0 = 3    a1 = PERIMETER_K    a2 = PERIMETER_K + 1    a3 = bound
+#   a6、a7：目前這一面的 perm_qt、ori_qt 基底位址          ra：face_tables 基底
 #   gp：h_perm 基底    tp：h_ori 基底    a4：bucket_start 基底    a5：bucket_entry 基底
-#   （gp、tp 在這個程式中沒有其他用途，所以拿來放常用的基底位址）
+#   （gp、tp、ra 在搜尋迴圈中沒有其他用途，所以拿來放常用的基底位址）
 
     .data
 input:  .string "21345671111111"        # PPPPPPPOOOOOOO
@@ -30,9 +31,14 @@ root_o: .half 0
 pos:    .zero 8                         # 解析後的排列 pos[0..6]
 oris:   .zero 8                         # 解析後的方向 oris[0..6]
 moves:  .zero 16                        # 解答，每步一個 byte（0..8）
-frames: .zero 192                       # 搜尋堆疊：12 層 × 16 bytes
-                                        #   +0 p  +2 o  +4 tp  +6 to（.half）
-                                        #   +8 face  +9 turn  +10 last_face（.byte）
+frames: .zero 104                       # 搜尋堆疊：哨兵 + 12 層，每層 8 bytes
+                                        #   +0 tp  +2 to（.half）  +4 face  +5 turn（.byte）
+                                        #   frame[-1] 是哨兵：根節點的 p、o，face = 3
+    .align 2
+face_tables:                            # face_tables[face]：該面的 perm_qt、ori_qt 位址
+        .word perm_qt_R, ori_qt_R
+        .word perm_qt_B, ori_qt_B
+        .word perm_qt_D, ori_qt_D
 names:  .byte 82, 0, 0, 0               # "R"   move 名稱，每個 4 bytes，索引 = move * 4
         .byte 82, 50, 0, 0              # "R2"
         .byte 82, 39, 0, 0              # "R'"
@@ -246,10 +252,11 @@ lookup_miss:					# error handle (lookup is called when found a valid path, so it
 
 # ---------------------------------------------------------------- search
 # 不使用遞迴的 IDA*。輸入：root_p、root_o；輸出 a0 = 解答長度（moves 已填好），失敗為 -1。
+# 搜尋迴圈內不呼叫任何函式（heuristic、load_face 都已展開），所以 ra 拿來放 face_tables。
 search:
-    addi sp, sp, -4			
+    addi sp, sp, -4
     sw   ra, 0(sp)				# return address stored in stack
-    la   gp, h_perm				
+    la   gp, h_perm
     la   tp, h_ori
     la   a4, bucket_start
     la   a5, bucket_entry
@@ -261,130 +268,134 @@ search:
     mv   a0, s5					# a0 = p
     mv   a1, s6					# a1 = o
     jal  ra, heuristic          # 第一輪的 bound = h(root)
-    mv   s1, a0					# s1 = distance
-    beqz a1, search_setup		# a1 = 1 (found in perimeter) 0 (not found in perimeter)
-    li   s0, 0                  # 根節點已經是精確距離：直接補完 (d = 0)
-    mv   a0, s5					# s5 = p
-    mv   a1, s6					# s6 = o
-    mv   a2, s4					# s4 = moves[]
+    mv   a3, a0					# a3 = bound
+    beqz a1, search_setup		# a1 = 1：根節點已經在 perimeter 內
+    li   s0, 0                  # 直接補完 (d = 0)
+    mv   a0, s5
+    mv   a1, s6
+    mv   a2, s4
     jal  ra, finish
     j    search_return
 
-search_setup:                   # 搜尋迴圈中固定不變的常數（heuristic 已展開，a0~a2 不再用來傳參數）
+search_setup:                   # 搜尋迴圈中固定不變的值
     li   a0, 3                  # 每一面轉 3 次、共 3 個面
     li   a1, PERIMETER_K
     addi a2, a1, 1              # 不在 perimeter 內時的 h = K + 1
-    mv   a3, s1                 # a3 = bound；s1 改成放 limit = bound - g
+    la   ra, face_tables        # 各面兩張轉移表的位址
+    la   t0, frames             # 哨兵 frame：根節點的 p、o 與「上一步的面」= 3
+    sh   s5, 0(t0)				# s5 = encoded p
+    sh   s6, 2(t0)				# s6 = encoded o
+    li   t1, 3
+    sb   t1, 4(t0)				# root face is 3
 
 search_iteration:               # 每一輪：從根節點重新開始
     li   s2, 255                # 這一輪被剪掉的節點中，最小的超出量 f - bound
     addi s1, a3, -1             # limit = bound - g，根節點的子節點 g = 1
     li   s0, 0
-    la   s3, frames				
-    la   t0, root_p
-    lhu  s5, 0(t0)				# s5 = p
-    la   t0, root_o
-    lhu  s6, 0(t0)				# s6 = o
-    li   s9, 3                  # 根節點沒有上一步的面 (face will always be 0, 1, 2)
+    la   s3, frames
+    addi s3, s3, 8              # frame[0]（frame[-1] 是哨兵）
+    li   s9, 3                  # 根節點沒有上一步的面
     li   s7, -1
     li   s8, 3                  # turn = 3：先換到第一個面
 
 search_loop:
-    bne  s8, a0, search_turn	# is this face turned by three times? (a0 = 3)
-    addi s7, s7, 1              # 換下一面，跳過和上一步同一面的 (initial: s7 = -1 + 1 = 0 (face R))
-    bne  s7, s9, search_face_ok # s9 is the last face
+    bne  s8, a0, search_turn	# 這一面還沒轉滿 3 次
+    addi s7, s7, 1              # 換下一面，跳過和上一步同一面的
+    bne  s7, s9, search_face_ok	# branch if the current face != last face
     addi s7, s7, 1
 search_face_ok:
     bgeu s7, a0, search_pop     # 三個面都試完了：回到上一層
-    mv   s10, s5				# s10 = p
-    mv   s11, s6				# s11 = o
-    li   s8, 0					# s8 = turn
-    jal  ra, load_face			# a6 = perm_qt; a7 = ori_qt
+    mv   s10, s5				# 從這一層的狀態開始轉
+    mv   s11, s6
+    li   s8, 0
+    slli t0, s7, 3              # face_tables[face]：perm_qt、ori_qt 的位址 
+    add  t0, ra, t0             # ra = face_tables
+    lw   a6, 0(t0)              # perm_qt[face]
+    lw   a7, 4(t0)				# ori_qt[face]
 
 search_turn:                    # 接著上一次的結果再轉一次：依序得到 X、X2、X'
-    slli t0, s10, 1				# s10 = p
-    add  t0, a6, t0				
-    lhu  s10, 0(t0)             # s10 = tp = perm_qt[face][tp] (the face is obtained in the condition of load_face)
-    slli t0, s11, 1				# s11 = o
+    slli t0, s10, 1
+    add  t0, a6, t0
+    lhu  s10, 0(t0)             # tp = perm_qt[face][tp]
+    slli t0, s11, 1
     add  t0, a7, t0
-    lhu  s11, 0(t0)             # s11 = to = ori_qt[face][to]
+    lhu  s11, 0(t0)             # to = ori_qt[face][to]
     addi s8, s8, 1				# turn++
-    # heuristic（展開）：t0 = h，t2 = 1 表示 h 是精確距離
-    add  t0, gp, s10
-    lbu  t0, 0(t0)              # h_perm[tp]
-    add  t1, tp, s11
-    lbu  t1, 0(t1)              # h_ori[to]
+    # heuristic（展開）：t0 = max(h_perm[tp], h_ori[to])
+    add  t0, gp, s10			# gp = h_perm
+    lbu  t0, 0(t0)
+    add  t1, tp, s11			# tp = h_ori
+    lbu  t1, 0(t1)
     bgeu t0, t1, search_hmax
     mv   t0, t1
-search_hmax:                    # t0 = max(h_perm, h_ori)
-    seqz t2, t0                 # h = 0 只有還原狀態：精確
-    bltu a1, t0, search_hdone   # h > K：不可能在 perimeter 內，不必查
-    slli t3, s10, 1
+search_hmax:
+    bltu a1, t0, search_plain   # h > K：不可能在 perimeter 內，不必查
+    slli t3, s10, 1				# 第 tp 個桶：[bucket_start[tp], bucket_start[tp + 1])
     add  t3, a4, t3
-    lhu  t4, 0(t3)              # 第 tp 個桶的起點
-    lhu  t5, 2(t3)              # 第 tp 個桶的終點
+    lhu  t4, 0(t3)
+    lhu  t5, 2(t3)
+    bgeu t4, t5, search_miss    # 空桶
+    slli t4, t4, 1
+    add  t4, a5, t4             # 指向第一個項目
+    slli t5, t5, 1
+    add  t5, a5, t5             # 指向桶的結尾
 search_scan:
-    bgeu t4, t5, search_miss
-    slli t3, t4, 1
-    add  t3, a5, t3
-    lhu  t3, 0(t3)              # 項目：o | 距離 << 10
+    lhu  t3, 0(t4)              # 項目：o | 距離 << 10
     andi t1, t3, 1023
     bltu t1, s11, search_scan_next # 桶內 o 遞增：還沒到就往後找
     bne  t1, s11, search_miss   # 已經超過：不在 perimeter 內
     srli t0, t3, 10             # 找到：精確距離
-    li   t2, 1
-    j    search_hdone
+    bltu s1, t0, search_prune   # 距離 > limit：剪枝
+    j    search_found           # 精確距離且不超過 bound：找到最短解
 search_scan_next:
-    addi t4, t4, 1
-    j    search_scan
+    addi t4, t4, 2
+    bltu t4, t5, search_scan
 search_miss:
     mv   t0, a2                 # 不在 perimeter 內：h = K + 1
-    li   t2, 0
-search_hdone:
-    bltu s1, t0, search_prune   # h > limit（也就是 g + h > bound）：剪枝 . s1 = limit, t0 = h
-    slli t1, s7, 1              # 不剪枝：才需要記錄這一步
+search_plain:                   # h 不是精確值
+    bltu s1, t0, search_prune   # h > limit（也就是 g + h > bound）：剪枝
+    slli t1, s7, 1              # 不剪枝：記錄這一步，往下一層
     add  t1, t1, s7
     add  t1, t1, s8
     addi t1, t1, -1             # move = face * 3 + turn - 1
     add  t3, s4, s0
     sb   t1, 0(t3)              # moves[d] = move
-    bnez t2, search_found       # 精確距離且不超過 bound：找到最短解
-    sh   s5, 0(s3)              # 保存這一層，往下一層 . s5 = p; s3 = frames
-    sh   s6, 2(s3)				# s6 = o
-    sh   s10, 4(s3)				# s10 = perm_qt[face][tp]
-    sh   s11, 6(s3)				# s11 = ori_qt[face][to]
-    sb   s7, 8(s3)				# s7 is face (1byte)
-    sb   s8, 9(s3)				# s8 is turn (1byte)
-    sb   s9, 10(s3)				# s9 is last face
-    addi s3, s3, 16				# frame += 16
+    sh   s10, 0(s3)             # 保存這一層：tp、to、face、turn
+    sh   s11, 2(s3)             #（p、o 就是上一層的 tp、to，上一步的面就是上一層的 face）
+    sb   s7, 4(s3)
+    sb   s8, 5(s3)
+    addi s3, s3, 8
     addi s0, s0, 1				# d++
     addi s1, s1, -1             # 下一層的 g 多 1：limit 少 1
-    mv   s5, s10				# s10 = perm
-    mv   s6, s11				# s11 = ori
-    mv   s9, s7					# s7 is face
-    li   s7, -1					# this move is decided, so s7 is -1 in the next move
+    mv   s5, s10				# s10 = tp
+    mv   s6, s11				# s11 = to
+    mv   s9, s7
+    li   s7, -1
     li   s8, 3
     j    search_loop
 
-search_prune:                   # 記下最小的超出量 h - limit（= h - (bound - g) = f - bound，至少 1）
-    sub  t1, t0, s1             # t0 = h, s1 = limit
-    bgeu t1, s2, search_loop    # s2 = next_bound . branch if h - limit >= next_bound
-    mv   s2, t1                 # next_bound = h - limit
+search_prune:                   # 記下最小的超出量 h - limit（= f - bound，至少 1）
+    sub  t1, t0, s1
+    bgeu t1, s2, search_loop
+    mv   s2, t1
     j    search_loop
 
 search_pop:
-    beqz s0, search_iteration_end # s0 is d
-    addi s3, s3, -16            # 回到上一層，接著試它的下一個 move
+    beqz s0, search_iteration_end
+    addi s3, s3, -8             # 回到上一層，接著試它的下一個 move
     addi s0, s0, -1				# d--
     addi s1, s1, 1              # 上一層的 g 少 1：limit 多 1
-    lhu  s5, 0(s3)
-    lhu  s6, 2(s3)
-    lhu  s10, 4(s3)
-    lhu  s11, 6(s3)
-    lbu  s7, 8(s3)
-    lbu  s8, 9(s3)
-    lbu  s9, 10(s3)
-    jal  ra, load_face
+    lhu  s10, 0(s3)
+    lhu  s11, 2(s3)
+    lbu  s7, 4(s3)
+    lbu  s8, 5(s3)
+    lhu  s5, -8(s3)             # 這一層的 p、o 與上一步的面，存在上一層的 frame . s5 = tp
+    lhu  s6, -6(s3)				# s6 = to
+    lbu  s9, -4(s3)				# s9 = face
+    slli t0, s7, 3
+    add  t0, ra, t0
+    lw   a6, 0(t0)
+    lw   a7, 4(t0)
     j    search_loop
 
 search_iteration_end:
@@ -393,13 +404,19 @@ search_iteration_end:
     add  a3, a3, s2             # 下一輪的 bound = bound + 最小的超出量
     j    search_iteration
 
-search_found:
-    addi s0, s0, 1              # distance
-    mv   a0, s10				# perm_qt[face][tp]
-    mv   a1, s11				# ori_qt[face][to]
-    add  a2, s4, s0				# s4 = moves[]
+search_found:                   # t0 = 剩下的精確距離
+    slli t1, s7, 1
+    add  t1, t1, s7
+    add  t1, t1, s8
+    addi t1, t1, -1             # move = face * 3 + turn - 1
+    add  t3, s4, s0
+    sb   t1, 0(t3)              # moves[d] = move
+    addi s0, s0, 1              # g
+    mv   a0, s10
+    mv   a1, s11
+    add  a2, s4, s0
     jal  ra, finish             # 補完剩下的步數
-    add  a0, a0, s0				# a0 = d + (distance in perimeter)
+    add  a0, a0, s0				# a0 = g + (distance in perimeter)
     j    search_return
 search_fail:
     li   a0, -1
