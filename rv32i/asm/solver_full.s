@@ -2851,9 +2851,11 @@ search_setup:                   # 搜尋迴圈中固定不變的常數（heurist
     li   a0, 3                  # 每一面轉 3 次、共 3 個面
     li   a1, PERIMETER_K
     addi a2, a1, 1              # 不在 perimeter 內時的 h = K + 1
+    mv   a3, s1                 # a3 = bound；s1 改成放 limit = bound - g
 
 search_iteration:               # 每一輪：從根節點重新開始
-    li   s2, 255                # next_bound
+    li   s2, 255                # 這一輪被剪掉的節點中，最小的超出量 f - bound
+    addi s1, a3, -1             # limit = bound - g，根節點的子節點 g = 1
     li   s0, 0
     la   s3, frames				
     la   t0, root_p
@@ -2884,12 +2886,6 @@ search_turn:                    # 接著上一次的結果再轉一次：依序�
     add  t0, a7, t0
     lhu  s11, 0(t0)             # s11 = to = ori_qt[face][to]
     addi s8, s8, 1				# turn++
-    slli t0, s7, 1				# s7 is count of faces
-    add  t0, t0, s7				# 
-    add  t0, t0, s8				# s8 is turn
-    addi t0, t0, -1             # move = face * 3 + turn - 1
-    add  t1, s4, s0				# s4 = moves, s0 is d
-    sb   t0, 0(t1)              # moves[d] = move
     # heuristic（展開）：t0 = h，t2 = 1 表示 h 是精確距離
     add  t0, gp, s10
     lbu  t0, 0(t0)              # h_perm[tp]
@@ -2922,14 +2918,13 @@ search_miss:
     mv   t0, a2                 # 不在 perimeter 內：h = K + 1
     li   t2, 0
 search_hdone:
-    addi t1, s0, 1              # g = d + 1
-    add  t1, t1, t0             # f = g + h
-    bgeu s1, t1, search_keep    # f <= bound：不剪枝
-    bgeu t1, s2, search_loop    # 剪枝，並記下最小的超出值
-    mv   s2, t1					# next_bound = f
-    j    search_loop
-
-search_keep:
+    bltu s1, t0, search_prune   # h > limit（也就是 g + h > bound）：剪枝 . s1 = limit, t0 = h
+    slli t1, s7, 1              # 不剪枝：才需要記錄這一步
+    add  t1, t1, s7
+    add  t1, t1, s8
+    addi t1, t1, -1             # move = face * 3 + turn - 1
+    add  t3, s4, s0
+    sb   t1, 0(t3)              # moves[d] = move
     bnez t2, search_found       # 精確距離且不超過 bound：找到最短解
     sh   s5, 0(s3)              # 保存這一層，往下一層 . s5 = p; s3 = frames
     sh   s6, 2(s3)				# s6 = o
@@ -2940,6 +2935,7 @@ search_keep:
     sb   s9, 10(s3)				# s9 is last face
     addi s3, s3, 16				# frame += 16
     addi s0, s0, 1				# d++
+    addi s1, s1, -1             # 下一層的 g 多 1：limit 少 1
     mv   s5, s10				# s10 = perm
     mv   s6, s11				# s11 = ori
     mv   s9, s7					# s7 is face
@@ -2947,10 +2943,17 @@ search_keep:
     li   s8, 3
     j    search_loop
 
+search_prune:                   # 記下最小的超出量 h - limit（= h - (bound - g) = f - bound，至少 1）
+    sub  t1, t0, s1             # t0 = h, s1 = limit
+    bgeu t1, s2, search_loop    # s2 = next_bound . branch if h - limit >= next_bound
+    mv   s2, t1                 # next_bound = h - limit
+    j    search_loop
+
 search_pop:
     beqz s0, search_iteration_end # s0 is d
     addi s3, s3, -16            # 回到上一層，接著試它的下一個 move
     addi s0, s0, -1				# d--
+    addi s1, s1, 1              # 上一層的 g 少 1：limit 多 1
     lhu  s5, 0(s3)
     lhu  s6, 2(s3)
     lhu  s10, 4(s3)
@@ -2963,8 +2966,8 @@ search_pop:
 
 search_iteration_end:
     li   t0, 255
-    beq  s2, t0, search_fail    # 沒有任何節點被剪掉：不應發生 
-    mv   s1, s2                 # 下一輪的 bound s2 = next_bound
+    beq  s2, t0, search_fail    # 沒有任何節點被剪掉：不應發生
+    add  a3, a3, s2             # 下一輪的 bound = bound + 最小的超出量
     j    search_iteration
 
 search_found:
