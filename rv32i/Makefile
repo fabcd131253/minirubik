@@ -12,9 +12,9 @@ RV_LDFLAGS ?= -Wl,--no-relax
 
 GEN := host/gen_tables
 
-.PHONY: all tables full cref rv32 elf gates clean
+.PHONY: all tables full gui cref rv32 elf gates clean
 
-all: tables full cref
+all: tables full gui cref
 
 # ---- host：表格產生器 ----
 $(GEN): host/gen_tables.c host/cube_common.h
@@ -32,13 +32,19 @@ asm/tables_ida.s: $(GEN)
 c_reference/tables.h: asm/tables.s ;
 c_reference/tables_ida.h: asm/tables_ida.s ;
 
-# ---- asm：Ripes 一次只讀一個檔案，而且 .equ 要先定義：表格在前、程式在後 ----
+# ---- asm：Ripes 一次只讀一個檔案，而且 .equ 要先定義：表格在前、程式在後、renderer 最後 ----
+# Ripes 不支援 .if，所以 renderer 的開關是換檔案：CLI 版接 render_cli.s（量測 --iret），
+# GUI 版接 render_gui.s（需要在 Ripes 加入 35 × 25 的 LED Matrix）
 full: asm/solver_full.s asm/solver_ida_full.s
+gui: asm/solver_gui.s
 
-asm/solver_full.s: asm/tables.s asm/solver.s
+asm/solver_full.s: asm/tables.s asm/solver.s asm/render_cli.s
 	cat $^ > $@
 
-asm/solver_ida_full.s: asm/tables_ida.s asm/solver.s
+asm/solver_ida_full.s: asm/tables_ida.s asm/solver.s asm/render_cli.s
+	cat $^ > $@
+
+asm/solver_gui.s: asm/tables.s asm/solver.s asm/render_gui.s
 	cat $^ > $@
 
 # ---- c_reference：host 上執行的版本（用來和 solver.s 比對輸出） ----
@@ -82,7 +88,7 @@ c_reference/H1-H4/h_gates_ida: c_reference/H1-H4/h_gates.c c_reference/solver_re
 
 clean:
 	$(RM) $(GEN) asm/tables.s asm/tables_ida.s asm/solver_full.s \
-		asm/solver_ida_full.s c_reference/tables.h c_reference/tables_ida.h \
+		asm/solver_ida_full.s asm/solver_gui.s c_reference/tables.h c_reference/tables_ida.h \
 		c_reference/solver_ref c_reference/solver_ref_ida \
 		c_reference/solver_ref.rv32.s c_reference/solver_ref.elf \
 		c_reference/solver_ref_ida.elf $(GATES)

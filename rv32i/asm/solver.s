@@ -5,8 +5,11 @@
 # 搜尋到 exact 且 g + d <= bound 的狀態就停止，沿 perimeter 補完剩下的步數。
 # PERIMETER_K = 0（tables_ida.s）時只有還原狀態會查表，等於只用 PDB 的 IDA*。
 #
-# 組譯：Ripes 一次只讀一個檔案，而且 .equ 要先定義才能使用，所以先接表格再接本檔：
-#   cat tables.s solver.s > solver_full.s
+# 組譯：Ripes 一次只讀一個檔案，而且 .equ 要先定義才能使用，所以先接表格，再接本檔，
+# 最後接 renderer（Ripes 不支援 .if，所以 renderer 的開關是換檔案）：
+#   cat tables.s solver.s render_cli.s > solver_full.s     CLI 版，量測 --iret
+#   cat tables.s solver.s render_gui.s > solver_gui.s      GUI 版，LED matrix 動畫
+# 兩個版本只差在 renderer：CLI 版的 render_input 只有一條 ret。
 # 輸入：修改下方 input 的 14 個字元（組譯時寫入）。
 # 輸出：解答（例如 "B' R' D2"）與換行；結束碼 0 成功、1 搜尋或驗證失敗、2 輸入不合法。
 #
@@ -15,11 +18,12 @@
 #   任何測試失敗時，結束碼為 1。
 # 一般模式（RUN_TESTS = 0）：只處理 input。量測 --iret（例如回報 21345671111111 的指令數）
 #   時使用這個模式，數字才只包含一次查詢。兩種模式只差開頭的一次判斷。
+# 兩種模式都在印出 input 的解答後呼叫 render_input（見 render_gui.s）。
 # Ripes 不支援 .if，所以模式是在執行時用 RUN_TESTS 判斷，而不是條件組譯。
     .equ RUN_TESTS, 1
 #
 # 只用 RV32I：沒有 mul/div/rem；乘以小常數用加法或 shift/add。
-# 這個 Ripes 版本不支援 .if，所以沒有條件組譯；LED renderer 尚未實作。
+# 這個 Ripes 版本不支援 .if，所以沒有條件組譯。
 #
 # 搜尋時的暫存器（search 內部）：
 #   s0 d：目前這一層的深度        s1 limit = bound - g（g = d + 1）   s2 這一輪最小的超出量
@@ -103,7 +107,8 @@ main:
     jal  ra, verify             # a0 = 0 表示套用解答後回到還原狀態
     bnez a0, exit_fail
     mv   a0, s0
-    jal  ra, print_solution
+    jal  ra, print_solution     # 之後 s1 = 解答步數
+    jal  ra, render_input       # LED 動畫（CLI 版是空的）
     li   a0, 0
     j    exit
 main_tests:                     # 測試模式：先跑內建測試，失敗個數記在 test_fail
@@ -112,7 +117,8 @@ main_tests:                     # 測試模式：先跑內建測試，失敗個�
     jal  ra, solve              # a0 = 0 成功（a1 = 步數）、1 失敗、2 不合法
     bnez a0, main_tests_exit
     mv   a0, a1
-    jal  ra, print_solution
+    jal  ra, print_solution     # 之後 s1 = 解答步數
+    jal  ra, render_input       # LED 動畫（CLI 版是空的）
     li   a0, 0
 main_tests_exit:                # a0 = input 的結束碼；任何測試失敗時改為 1
     la   t0, test_fail
@@ -706,7 +712,7 @@ verify_check:
     ret
 
 # ---------------------------------------------------------------- print_solution
-# 印出 moves[0..a0)，move 之間以空白分隔，最後換行。
+# 印出 moves[0..a0)，move 之間以空白分隔，最後換行。返回時 s1 = a0（render_input 使用）。
 print_solution:
     mv   s1, a0					# a0 is distance
     la   s2, moves
