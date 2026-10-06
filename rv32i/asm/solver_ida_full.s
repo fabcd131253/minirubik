@@ -1761,13 +1761,18 @@ search:
     mv   a1, s6					# a1 = o
     jal  ra, heuristic          # 第一輪的 bound = h(root)
     mv   s1, a0					# s1 = distance
-    beqz a1, search_iteration	# a1 = 1 (found in perimeter) 0 (not found in perimeter)
+    beqz a1, search_setup		# a1 = 1 (found in perimeter) 0 (not found in perimeter)
     li   s0, 0                  # 根節點已經是精確距離：直接補完 (d = 0)
     mv   a0, s5					# s5 = p
     mv   a1, s6					# s6 = o
     mv   a2, s4					# s4 = moves[]
     jal  ra, finish
     j    search_return
+
+search_setup:                   # 搜尋迴圈中固定不變的常數（heuristic 已展開，a0~a2 不再用來傳參數）
+    li   a0, 3                  # 每一面轉 3 次、共 3 個面
+    li   a1, PERIMETER_K
+    addi a2, a1, 1              # 不在 perimeter 內時的 h = K + 1
 
 search_iteration:               # 每一輪：從根節點重新開始
     li   s2, 255                # next_bound
@@ -1782,13 +1787,12 @@ search_iteration:               # 每一輪：從根節點重新開始
     li   s8, 3                  # turn = 3：先換到第一個面
 
 search_loop:
-    li   t0, 3
-    bne  s8, t0, search_turn	# is this face turned by three times? (initial: s8 = 3 = t0)
+    bne  s8, a0, search_turn	# is this face turned by three times? (a0 = 3)
     addi s7, s7, 1              # 換下一面，跳過和上一步同一面的 (initial: s7 = -1 + 1 = 0 (face R))
     bne  s7, s9, search_face_ok # s9 is the last face
-    addi s7, s7, 1				
+    addi s7, s7, 1
 search_face_ok:
-    bgeu s7, t0, search_pop     # 三個面都試完了：回到上一層 
+    bgeu s7, a0, search_pop     # 三個面都試完了：回到上一層
     mv   s10, s5				# s10 = p
     mv   s11, s6				# s11 = o
     li   s8, 0					# s8 = turn
@@ -1808,18 +1812,47 @@ search_turn:                    # 接著上一次的結果再轉一次：依序�
     addi t0, t0, -1             # move = face * 3 + turn - 1
     add  t1, s4, s0				# s4 = moves, s0 is d
     sb   t0, 0(t1)              # moves[d] = move
-    mv   a0, s10				# a0 = perm_qt[face][tp]
-    mv   a1, s11				# a1 = ori_qt[face][to]
-    jal  ra, heuristic			# see if the new state is in perimeter
-    addi t1, s0, 1              # g = d + 1 (the heuristic find the d + 1 move, since d isn't accumulated yet)
-    add  t2, t1, a0             # f = g + h . a0 is the distance (a0 may be max(h_perm, h_ori) or distance found in perimeter) 
-    bgeu s1, t2, search_keep    # f <= bound：不剪枝 (initial: s1 is h)
-    bgeu t2, s2, search_loop    # 剪枝，並記下最小的超出值 (initial: s2 = 255, never exceed) . when taking this path, the move calculated above will be ignored
-    mv   s2, t2					# next_bound = f
+    # heuristic（展開）：t0 = h，t2 = 1 表示 h 是精確距離
+    add  t0, gp, s10
+    lbu  t0, 0(t0)              # h_perm[tp]
+    add  t1, tp, s11
+    lbu  t1, 0(t1)              # h_ori[to]
+    bgeu t0, t1, search_hmax
+    mv   t0, t1
+search_hmax:                    # t0 = max(h_perm, h_ori)
+    seqz t2, t0                 # h = 0 只有還原狀態：精確
+    bltu a1, t0, search_hdone   # h > K：不可能在 perimeter 內，不必查
+    slli t3, s10, 1
+    add  t3, a4, t3
+    lhu  t4, 0(t3)              # 第 tp 個桶的起點
+    lhu  t5, 2(t3)              # 第 tp 個桶的終點
+search_scan:
+    bgeu t4, t5, search_miss
+    slli t3, t4, 1
+    add  t3, a5, t3
+    lhu  t3, 0(t3)              # 項目：o | 距離 << 10
+    andi t1, t3, 1023
+    bltu t1, s11, search_scan_next # 桶內 o 遞增：還沒到就往後找
+    bne  t1, s11, search_miss   # 已經超過：不在 perimeter 內
+    srli t0, t3, 10             # 找到：精確距離
+    li   t2, 1
+    j    search_hdone
+search_scan_next:
+    addi t4, t4, 1
+    j    search_scan
+search_miss:
+    mv   t0, a2                 # 不在 perimeter 內：h = K + 1
+    li   t2, 0
+search_hdone:
+    addi t1, s0, 1              # g = d + 1
+    add  t1, t1, t0             # f = g + h
+    bgeu s1, t1, search_keep    # f <= bound：不剪枝
+    bgeu t1, s2, search_loop    # 剪枝，並記下最小的超出值
+    mv   s2, t1					# next_bound = f
     j    search_loop
 
 search_keep:
-    bnez a1, search_found       # 精確距離且不超過 bound：找到最短解 . a1 = 1 (found) 0 (not found)
+    bnez t2, search_found       # 精確距離且不超過 bound：找到最短解
     sh   s5, 0(s3)              # 保存這一層，往下一層 . s5 = p; s3 = frames
     sh   s6, 2(s3)				# s6 = o
     sh   s10, 4(s3)				# s10 = perm_qt[face][tp]
