@@ -2657,87 +2657,95 @@ exit:
 
 # ---------------------------------------------------------------- parse
 # 解析 input，檢查合法性，算出排列索引 p 與方向索引 o。
-# 回傳 a0 = 0 成功（a1 = p、a2 = o），a0 = 1 不合法。只執行一次，不講求速度。
+# 回傳 a0 = 0 成功（a1 = p、a2 = o），a0 = 1 不合法。
+# 檢查的順序與內容不變；為了讓已還原、短打亂的輸入也比 gcc 快，改寫成：
+#   指標遞增、常數放在迴圈外、mod 3 用位元遮罩、乘法展開成 shift/add。
 parse:
-    la   t0, input
-    la   t1, pos
-    la   t2, oris
-    li   t3, 0                  # i
+    la   t0, input              # t0：目前的排列字元（方向字元在 7(t0)）
+    la   t1, pos                # t1：目前的 pos[i]（oris[i] 在 8(t1)，oris 緊接在 pos 後面）
+    addi t3, t0, 7              # 迴圈結束的位置
     li   t4, 0                  # seen：第 c 個 bit 為 1 表示角塊 c 出現過
     li   t5, 0                  # 方向總和
     li   t6, 7
+    li   a3, 3
+    li   a4, 1
 parse_loop:
-    add  a0, t0, t3             # Nth char from input
-    lbu  a1, 0(a0)              # Load the char
-    addi a1, a1, -49            # minus '1' -> 0；比 '1' 小的字元（含 NUL）會變成很大的無號數
+    lbu  a1, 0(t0)              # 排列字元
+    addi a1, a1, -49            # '1' -> 0；比 '1' 小的字元（含 NUL）會變成很大的無號數
     bgeu a1, t6, parse_bad
-    li   a2, 1                  
-    sll  a2, a2, a1             # a1 was cube n, shift it to corr. position
-    and  a3, t4, a2             # check if there is already 1 at that position
-    bnez a3, parse_bad          # 角塊重複
-    or   t4, t4, a2             # set 1 at that position
-    add  a3, t1, t3             # t1 = pos, t3 = i
-    sb   a1, 0(a3)              # a1 = cube n 
-    lbu  a1, 7(a0)              # 方向字元, do the same thing to line 104
+    sll  a2, a4, a1             # 角塊 c 對應的 bit . a4 = 1
+    and  a5, t4, a2				# t4 = seen positions (0001000 means cube 3 was seen)
+    bnez a5, parse_bad          # 角塊重複
+    or   t4, t4, a2				# set 1 at that position
+    sb   a1, 0(t1)              # store it to pos[i]
+    lbu  a1, 7(t0)              # 方向字元
     addi a1, a1, -49
-    li   a2, 3
-    bgeu a1, a2, parse_bad
-    add  t5, t5, a1             # add the ori to t5
-    add  a3, t2, t3             # t2 = ori, t3 = i
-    sb   a1, 0(a3)
-    addi t3, t3, 1              # i = i + 1
-    blt  t3, t6, parse_loop     # i < 7
-    lbu  a1, 14(t0)             # 14(t0) must be NULL
-    bnez a1, parse_bad          # 長度必須剛好 14
-    li   a2, 3                  
-parse_mod3:                     # 總和最多 14，用減法取 mod 3. t5 = sum of oris
-    blt  t5, a2, parse_mod3_done
-    sub  t5, t5, a2
-    j    parse_mod3
-parse_mod3_done:
-    bnez t5, parse_bad          # 方向總和必須是 3 的倍數
-    # 排列索引：p = p * (7 - i) + （後面比 pos[i] 小的個數）. refer to encode()
-    li   a1, 0                  # p
-    li   t3, 0                  # i
-parse_rank:                     # encode the cube state to rank 
-    add  a0, t1, t3             
-    lbu  a2, 0(a0)              # pos[i]
+    bgeu a1, a3, parse_bad		# >= 3
+    add  t5, t5, a1				# t5 is sum of orientations
+    sb   a1, 8(t1)              # store it to oris[i]
+    addi t0, t0, 1				# input++
+    addi t1, t1, 1				# pos++
+    bne  t0, t3, parse_loop		# branch if input[i] != input[7]
+    lbu  a1, 7(t0)              # input[14] 必須是 NUL：長度剛好 14
+    bnez a1, parse_bad
+    li   a2, 0x1249             # 0x1249 = 0001 0010 0100 1001
+    srl  a2, a2, t5				# LSB will be 1 if it is the multiple of 3
+    andi a2, a2, 1				
+    beqz a2, parse_bad          # 方向總和必須是 3 的倍數
+
+    # 排列索引：先把每一位的 smaller（後面比 pos[i] 小的個數）寫回 pos[i]，
+    # i 由小到大，之後只會讀到 pos[j]（j > i），所以覆寫是安全的。i = 6 的 smaller 一定是 0。
+    addi t1, t1, -7             # t1 = &pos[0] (was pos[7])
+    addi t3, t1, 6              # 只算 i = 0..5 . t3 = pos[6]
+    addi t6, t1, 7              # 內層迴圈的結束位置 &pos[7] . t6 = pos[7]
+parse_rank:
+    lbu  a2, 0(t1)              # pos[i]
     li   a3, 0                  # smaller
-    addi a4, t3, 1              # j = i + 1
+    addi a4, t1, 1              # j = &pos[i] + 1
 parse_count:
-    bge  a4, t6, parse_count_done   # t6 = 7
-    add  a0, t1, a4             
-    lbu  a5, 0(a0)              # pos[j]
-    bgeu a5, a2, parse_count_next
-    addi a3, a3, 1              # smaller++
-parse_count_next:
-    addi a4, a4, 1              # j++
-    j    parse_count
-parse_count_done:
-    sub  a4, t6, t3             # t6 = 7, t3 = i . a4 = CUBIES - i (a4 is freed)
-    li   a5, 0                  # 
-parse_mul:
-    beqz a4, parse_mul_done     # 
-    add  a5, a5, a1             # a1 = p (perm_rank)
-    addi a4, a4, -1             # implies how many additions are left
-    j    parse_mul
-parse_mul_done:
-    add  a1, a5, a3             # a3 = smaller . p = p * (7 - i) + smaller
-    addi t3, t3, 1              # i++
-    blt  t3, t6, parse_rank     # i < CUBIES
-    # 方向索引：前 6 個方向當作三進位數，o = o * 3 + oris[i]
-    li   a2, 0                  # o
-    li   t3, 0                  # i
-    li   a4, 6
+    lbu  a5, 0(a4)				# a5 = pos[i + 1]
+    sltu a5, a5, a2             # pos[j] < pos[i]：1，否則 0
+    add  a3, a3, a5				# a3 = smaller
+    addi a4, a4, 1				# j++
+    bne  a4, t6, parse_count	# a4 = j, t6 = 7
+    sb   a3, 0(t1)              # pos[i] = smaller
+    addi t1, t1, 1				# i++
+    bne  t1, t3, parse_rank
+    # p = ((((c0 × 6 + c1) × 5 + c2) × 4 + c3) × 3 + c4) × 2 + c5，乘法展開成 shift/add
+    addi t1, t1, -6             # t1 = &pos[0]
+    lbu  a1, 0(t1)              # p = c0
+    slli a2, a1, 2				# x 4
+    slli a1, a1, 1				# x 2
+    add  a1, a1, a2             # × 6 = x4 + x2
+    lbu  a2, 1(t1)
+    add  a1, a1, a2             # + c1
+    slli a2, a1, 2				# x 4
+    add  a1, a1, a2             # × 5
+    lbu  a2, 2(t1)
+    add  a1, a1, a2             # + c2
+    slli a1, a1, 2              # × 4
+    lbu  a2, 3(t1)
+    add  a1, a1, a2             # + c3
+    slli a2, a1, 1				# x 2
+    add  a1, a1, a2             # × 3
+    lbu  a2, 4(t1)
+    add  a1, a1, a2             # + c4
+    slli a1, a1, 1              # × 2
+    lbu  a2, 5(t1)
+    add  a1, a1, a2             # + c5
+
+    # 方向索引：前 6 個方向當作三進位數，o = o × 3 + oris[i]
+    li   a2, 0					
+    addi t1, t1, 8              # t1 = &oris[0]
+    addi t3, t1, 6				# t3 = &oris[6]
 parse_ori:
-    add  a0, t2, t3				# t2 = oris, a0 = oris + i
-    lbu  a5, 0(a0)				# gets oris
-    slli a3, a2, 1				
-    add  a2, a3, a2             # o * 3 (a2 = a2*2 + a2)
-    add  a2, a2, a5				# a2 = a2*3 + oris
-    addi t3, t3, 1				# i++
-    blt  t3, a4, parse_ori
-    li   a0, 0					# a0 is return address
+    lbu  a5, 0(t1)				# a5 = oris[i]
+    slli a3, a2, 1				# a3 = 2 * a2
+    add  a2, a3, a2             # o × 3	. 2 * a2 + a2
+    add  a2, a2, a5				# a2 = 3 * a2 + oris[i]
+    addi t1, t1, 1				# i++
+    bne  t1, t3, parse_ori
+    li   a0, 0
     ret
 parse_bad:
     li   a0, 1
@@ -2860,10 +2868,10 @@ search_setup:                   # 搜尋迴圈中固定不變的值
     addi a2, a1, 1              # 不在 perimeter 內時的 h = K + 1
     la   ra, face_tables        # 各面兩張轉移表的位址
     la   t0, frames             # 哨兵 frame：根節點的 p、o 與「上一步的面」= 3
-    sh   s5, 0(t0)				# s5 = encoded p
-    sh   s6, 2(t0)				# s6 = encoded o
+    sh   s5, 0(t0)
+    sh   s6, 2(t0)
     li   t1, 3
-    sb   t1, 4(t0)				# root face is 3
+    sb   t1, 4(t0)
 
 search_iteration:               # 每一輪：從根節點重新開始
     li   s2, 255                # 這一輪被剪掉的節點中，最小的超出量 f - bound
@@ -2878,17 +2886,17 @@ search_iteration:               # 每一輪：從根節點重新開始
 search_loop:
     bne  s8, a0, search_turn	# 這一面還沒轉滿 3 次
     addi s7, s7, 1              # 換下一面，跳過和上一步同一面的
-    bne  s7, s9, search_face_ok	# branch if the current face != last face
+    bne  s7, s9, search_face_ok
     addi s7, s7, 1
 search_face_ok:
     bgeu s7, a0, search_pop     # 三個面都試完了：回到上一層
     mv   s10, s5				# 從這一層的狀態開始轉
     mv   s11, s6
     li   s8, 0
-    slli t0, s7, 3              # face_tables[face]：perm_qt、ori_qt 的位址 
-    add  t0, ra, t0             # ra = face_tables
-    lw   a6, 0(t0)              # perm_qt[face]
-    lw   a7, 4(t0)				# ori_qt[face]
+    slli t0, s7, 3              # face_tables[face]：perm_qt、ori_qt 的位址
+    add  t0, ra, t0
+    lw   a6, 0(t0)
+    lw   a7, 4(t0)
 
 search_turn:                    # 接著上一次的結果再轉一次：依序得到 X、X2、X'
     slli t0, s10, 1
@@ -2899,15 +2907,15 @@ search_turn:                    # 接著上一次的結果再轉一次：依序�
     lhu  s11, 0(t0)             # to = ori_qt[face][to]
     addi s8, s8, 1				# turn++
     # heuristic（展開）：t0 = max(h_perm[tp], h_ori[to])
-    add  t0, gp, s10			# gp = h_perm
+    add  t0, gp, s10
     lbu  t0, 0(t0)
-    add  t1, tp, s11			# tp = h_ori
+    add  t1, tp, s11
     lbu  t1, 0(t1)
     bgeu t0, t1, search_hmax
     mv   t0, t1
 search_hmax:
     bltu a1, t0, search_plain   # h > K：不可能在 perimeter 內，不必查
-    slli t3, s10, 1				# 第 tp 個桶：[bucket_start[tp], bucket_start[tp + 1])
+    slli t3, s10, 1             # 第 tp 個桶：[bucket_start[tp], bucket_start[tp + 1])
     add  t3, a4, t3
     lhu  t4, 0(t3)
     lhu  t5, 2(t3)
@@ -2944,8 +2952,8 @@ search_plain:                   # h 不是精確值
     addi s3, s3, 8
     addi s0, s0, 1				# d++
     addi s1, s1, -1             # 下一層的 g 多 1：limit 少 1
-    mv   s5, s10				# s10 = tp
-    mv   s6, s11				# s11 = to
+    mv   s5, s10
+    mv   s6, s11
     mv   s9, s7
     li   s7, -1
     li   s8, 3
@@ -2966,9 +2974,9 @@ search_pop:
     lhu  s11, 2(s3)
     lbu  s7, 4(s3)
     lbu  s8, 5(s3)
-    lhu  s5, -8(s3)             # 這一層的 p、o 與上一步的面，存在上一層的 frame . s5 = tp
-    lhu  s6, -6(s3)				# s6 = to
-    lbu  s9, -4(s3)				# s9 = face
+    lhu  s5, -8(s3)             # 這一層的 p、o 與上一步的面，存在上一層的 frame
+    lhu  s6, -6(s3)
+    lbu  s9, -4(s3)
     slli t0, s7, 3
     add  t0, ra, t0
     lw   a6, 0(t0)
