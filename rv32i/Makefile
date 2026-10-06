@@ -12,7 +12,7 @@ RV_LDFLAGS ?= -Wl,--no-relax
 
 GEN := host/gen_tables
 
-.PHONY: all tables full cref rv32 elf clean
+.PHONY: all tables full cref rv32 elf gates clean
 
 all: tables full cref
 
@@ -66,9 +66,23 @@ c_reference/solver_ref.elf: c_reference/solver_ref.c c_reference/tables.h
 c_reference/solver_ref_ida.elf: c_reference/solver_ref.c c_reference/tables_ida.h
 	$(RV_CC) $(RV_FLAGS) $(RV_LDFLAGS) -DTABLES_IDA $< -o $@
 
+# ---- c_reference/H1-H4：對 solver_ref.c 執行 host 端關卡 H1–H4 ----
+# 標準答案由方塊模型重新建立，獨立於 tables.h；H3 對全部 3,674,160 個狀態搜尋，需要幾分鐘
+GATES := c_reference/H1-H4/h_gates c_reference/H1-H4/h_gates_ida
+
+gates: $(GATES)
+	./c_reference/H1-H4/h_gates
+	./c_reference/H1-H4/h_gates_ida
+
+c_reference/H1-H4/h_gates: c_reference/H1-H4/h_gates.c c_reference/solver_ref.c c_reference/tables.h
+	$(CC) $(CFLAGS) -Ic_reference $< -o $@
+
+c_reference/H1-H4/h_gates_ida: c_reference/H1-H4/h_gates.c c_reference/solver_ref.c c_reference/tables_ida.h
+	$(CC) $(CFLAGS) -Ic_reference -DTABLES_IDA $< -o $@
+
 clean:
 	$(RM) $(GEN) asm/tables.s asm/tables_ida.s asm/solver_full.s \
 		asm/solver_ida_full.s c_reference/tables.h c_reference/tables_ida.h \
 		c_reference/solver_ref c_reference/solver_ref_ida \
 		c_reference/solver_ref.rv32.s c_reference/solver_ref.elf \
-		c_reference/solver_ref_ida.elf
+		c_reference/solver_ref_ida.elf $(GATES)

@@ -4,3 +4,5 @@ c_reference/solver_ref
 c_reference/solver_ref_ida
 c_reference/solver_ref.elf
 c_reference/solver_ref_ida.elf
+c_reference/H1-H4/h_gates
+c_reference/H1-H4/h_gates_ida
