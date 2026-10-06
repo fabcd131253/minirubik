@@ -4,6 +4,58 @@
 	.attribute unaligned_access, 0
 	.attribute stack_align, 16
 	.text
+	.section	.rodata.str1.4,"aMS",@progbits,1
+	.align	2
+.LC0:
+	.string	" "
+	.align	2
+.LC1:
+	.string	"\n"
+	.text
+	.align	2
+	.type	print_solution, @function
+print_solution:
+	mv	a2,a0
+	beq	a0,zero,.L2
+	lui	a4,%hi(.LANCHOR0)
+	lui	a3,%hi(.LANCHOR1)
+	lui	a1,%hi(.LC0)
+	addi	a4,a4,%lo(.LANCHOR0)
+	addi	a3,a3,%lo(.LANCHOR1)
+	addi	a1,a1,%lo(.LC0)
+	li	a5,0
+	j	.L3
+.L8:
+	addi	a4,a4,1
+	mv	a0,a1
+ #APP
+# 86 "c_reference/solver_ref.c" 1
+	ecall
+# 0 "" 2
+ #NO_APP
+.L3:
+	lbu	a0,0(a4)
+	li	a7,4
+	slli	a0,a0,2
+	add	a0,a3,a0
+ #APP
+# 86 "c_reference/solver_ref.c" 1
+	ecall
+# 0 "" 2
+ #NO_APP
+	addi	a5,a5,1
+	bne	a2,a5,.L8
+.L2:
+	lui	a0,%hi(.LC1)
+	addi	a0,a0,%lo(.LC1)
+	li	a7,4
+ #APP
+# 86 "c_reference/solver_ref.c" 1
+	ecall
+# 0 "" 2
+ #NO_APP
+	ret
+	.size	print_solution, .-print_solution
 	.align	2
 	.type	finish, @function
 finish:
@@ -19,18 +71,18 @@ finish:
 	addi	sp,sp,-64
 	sw	s6,36(sp)
 	mv	t4,a1
-	bgeu	a4,a0,.L14
+	bgeu	a4,a0,.L22
 	lui	a1,%hi(bucket_entry)
 	addi	a1,a1,%lo(bucket_entry)
 	slli	a5,a4,1
 	add	a5,a1,a5
-.L4:
+.L12:
 	lhu	s6,0(a5)
 	andi	a3,s6,1023
-	bgtu	t4,a3,.L29
-	bne	t4,a3,.L15
+	bgtu	t4,a3,.L36
+	bne	t4,a3,.L23
 	srli	s6,s6,10
-	beq	s6,zero,.L1
+	beq	s6,zero,.L9
 	sw	s0,60(sp)
 	sw	s1,56(sp)
 	sw	s2,52(sp)
@@ -42,30 +94,30 @@ finish:
 	sw	s9,24(sp)
 	sw	s10,20(sp)
 	sw	s11,16(sp)
-.L2:
+.L10:
 	mv	t2,s6
-	lui	s5,%hi(.LANCHOR0)
-	lui	s4,%hi(.LANCHOR0+1460)
+	lui	s5,%hi(.LANCHOR1+36)
+	lui	s4,%hi(.LANCHOR1+1496)
 	lui	s3,%hi(perm_qt_R)
 	li	a0,4
 	li	s1,1
-	lui	s8,%hi(.LANCHOR1-1176)
+	lui	s8,%hi(.LANCHOR2-1140)
 	lui	s7,%hi(perm_qt_B)
 	lui	s2,%hi(perm_qt_D)
 	mv	s9,a2
-.L12:
+.L20:
 	mv	t6,t2
 	slli	a6,t1,1
 	li	a7,0
 	addi	t2,t2,-1
-	addi	s0,s4,%lo(.LANCHOR0+1460)
+	addi	s0,s4,%lo(.LANCHOR1+1496)
 	addi	t0,s3,%lo(perm_qt_R)
-.L6:
+.L14:
 	mv	a5,t4
 	li	t3,1
 	mv	a3,a6
 	sw	t4,12(sp)
-.L7:
+.L15:
 	add	a3,t0,a3
 	lhu	t1,0(a3)
 	slli	a5,a5,1
@@ -78,38 +130,38 @@ finish:
 	lhu	s11,0(a4)
 	lhu	t4,0(a2)
 	lhu	a5,0(a5)
-	bgeu	t4,s11,.L9
+	bgeu	t4,s11,.L17
 	slli	a2,t4,1
 	add	a2,a1,a2
-.L11:
+.L19:
 	lhu	a4,0(a2)
 	andi	s10,a4,1023
-	bgtu	a5,s10,.L30
-	bne	a5,s10,.L9
+	bgtu	a5,s10,.L37
+	bne	a5,s10,.L17
 	srli	a4,a4,10
-	beq	t2,a4,.L31
-.L9:
+	beq	t2,a4,.L38
+.L17:
 	addi	t3,t3,1
-	bne	t3,a0,.L7
+	bne	t3,a0,.L15
 	addi	a7,a7,1
 	lw	t4,12(sp)
-	beq	a7,zero,.L32
-	addi	s0,s5,%lo(.LANCHOR0)
+	beq	a7,zero,.L39
+	addi	s0,s5,%lo(.LANCHOR1+36)
 	addi	t0,s2,%lo(perm_qt_D)
-	bne	a7,s1,.L6
-	addi	s0,s8,%lo(.LANCHOR1-1176)
+	bne	a7,s1,.L14
+	addi	s0,s8,%lo(.LANCHOR2-1140)
 	addi	t0,s7,%lo(perm_qt_B)
-	j	.L6
-.L30:
+	j	.L14
+.L37:
 	addi	t4,t4,1
 	addi	a2,a2,2
-	bgtu	s11,t4,.L11
-	j	.L9
-.L32:
-	addi	s0,s4,%lo(.LANCHOR0+1460)
+	bgtu	s11,t4,.L19
+	j	.L17
+.L39:
+	addi	s0,s4,%lo(.LANCHOR1+1496)
 	addi	t0,s3,%lo(perm_qt_R)
-	j	.L6
-.L31:
+	j	.L14
+.L38:
 	slli	a4,a7,1
 	sub	a3,s1,t6
 	add	a4,a7,a4
@@ -118,10 +170,10 @@ finish:
 	add	a3,s9,a3
 	add	a4,a4,t3
 	sb	a4,-1(a3)
-	beq	t2,zero,.L33
+	beq	t2,zero,.L40
 	mv	t4,a5
-	j	.L12
-.L33:
+	j	.L20
+.L40:
 	lw	s0,60(sp)
 	lw	s1,56(sp)
 	lw	s2,52(sp)
@@ -133,16 +185,16 @@ finish:
 	lw	s9,24(sp)
 	lw	s10,20(sp)
 	lw	s11,16(sp)
-.L1:
+.L9:
 	mv	a0,s6
 	lw	s6,36(sp)
 	addi	sp,sp,64
 	jr	ra
-.L29:
+.L36:
 	addi	a4,a4,1
 	addi	a5,a5,2
-	bgtu	a0,a4,.L4
-.L15:
+	bgtu	a0,a4,.L12
+.L23:
 	sw	s0,60(sp)
 	sw	s1,56(sp)
 	sw	s2,52(sp)
@@ -155,8 +207,8 @@ finish:
 	sw	s10,20(sp)
 	sw	s11,16(sp)
 	li	s6,-1
-	j	.L2
-.L14:
+	j	.L10
+.L22:
 	lui	a1,%hi(bucket_entry)
 	sw	s0,60(sp)
 	sw	s1,56(sp)
@@ -171,643 +223,769 @@ finish:
 	sw	s11,16(sp)
 	addi	a1,a1,%lo(bucket_entry)
 	li	s6,-1
-	j	.L2
+	j	.L10
 	.size	finish, .-finish
-	.section	.rodata.str1.4,"aMS",@progbits,1
 	.align	2
-.LC0:
-	.string	" "
+	.type	solve, @function
+solve:
+	lui	t3,%hi(oris)
+	addi	sp,sp,-96
+	addi	t3,t3,%lo(oris)
+	lui	t4,%hi(pos)
+	sw	s0,88(sp)
+	sw	ra,92(sp)
+	mv	a6,t3
+	mv	a4,a0
+	addi	s0,a0,7
+	addi	a2,t4,%lo(pos)
+	li	t1,0
+	li	a3,0
+	li	t0,6
+	li	t6,1
+	li	t2,2
+.L45:
+	lbu	a5,0(a4)
+	addi	a5,a5,-49
+	sll	a7,t6,a5
+	and	t5,a7,a3
+	bgtu	a5,t0,.L43
+	bne	t5,zero,.L43
+	sb	a5,0(a2)
+	lbu	a5,7(a4)
+	or	a3,a3,a7
+	addi	a4,a4,1
+	addi	a5,a5,-49
+	bgtu	a5,t2,.L43
+	sb	a5,0(a6)
+	add	t1,t1,a5
+	addi	a6,a6,1
+	addi	a2,a2,1
+	bne	s0,a4,.L45
+	lbu	a5,14(a0)
+	bne	a5,zero,.L43
+	li	a5,11
+	bleu	t1,a5,.L48
+	addi	t1,t1,-12
+.L48:
+	li	a5,5
+	bleu	t1,a5,.L49
+	addi	t1,t1,-6
+.L49:
+	li	a5,2
+	bleu	t1,a5,.L50
+	addi	t1,t1,-3
+.L50:
+	bne	t1,zero,.L43
+	addi	a6,t4,%lo(pos)
+	sw	s1,84(sp)
+	sw	s2,80(sp)
+	sw	s3,76(sp)
+	sw	s4,72(sp)
+	sw	s5,68(sp)
+	sw	s6,64(sp)
+	sw	s7,60(sp)
+	sw	s8,56(sp)
+	sw	s9,52(sp)
+	sw	s10,48(sp)
+	sw	s11,44(sp)
+	addi	a0,a6,6
+	li	a7,0
+	li	t4,7
+	li	t5,8
+.L60:
+	addi	t1,t1,1
+	beq	t1,t4,.L143
+.L51:
+	lbu	a2,0(a6)
+	mv	a5,a6
+	li	a3,0
+.L54:
+	lbu	a4,1(a5)
+	addi	a5,a5,1
+	sltu	a4,a4,a2
+	add	a3,a3,a4
+	bne	a0,a5,.L54
+	sub	a5,t5,t1
+	andi	a4,a5,1
+	andi	a2,a5,2
+	bne	a4,zero,.L55
+	bne	a2,zero,.L56
+	slli	a7,a7,2
+	addi	t1,t1,1
+	add	a7,a3,a7
+	addi	a6,a6,1
+	bne	t1,t4,.L51
+.L143:
+	addi	a2,t3,6
+	li	a3,0
+.L52:
+	lbu	a5,0(t3)
+	slli	a4,a3,1
+	add	a3,a4,a3
+	addi	t3,t3,1
+	add	a3,a5,a3
+	bne	a2,t3,.L52
+	lui	a2,%hi(h_perm)
+	slli	a4,a7,16
+	slli	a5,a3,16
+	lui	s8,%hi(.LANCHOR2)
+	srli	a4,a4,16
+	srli	a5,a5,16
+	addi	s11,a2,%lo(h_perm)
+	addi	s8,s8,%lo(.LANCHOR2)
+	add	a2,s11,a4
+	add	a0,s8,a5
+	lbu	a2,0(a2)
+	lbu	a0,320(a0)
+	lui	t1,%hi(root_p)
+	lui	a6,%hi(root_o)
+	sh	a7,%lo(root_p)(t1)
+	sh	a3,%lo(root_o)(a6)
+	mv	s9,a2
+	bgeu	a2,a0,.L61
+	mv	s9,a0
+.L61:
+	li	a3,5
+	mv	s1,a1
+	bgtu	s9,a3,.L62
+	lui	a3,%hi(bucket_start)
+	addi	a3,a3,%lo(bucket_start)
+	slli	a1,a4,1
+	slli	a2,a4,1
+	add	a2,a3,a2
+	add	a3,a3,a1
+	lhu	a0,2(a3)
+	lhu	a1,0(a2)
+	bgeu	a1,a0,.L104
+	lui	a3,%hi(bucket_entry)
+	addi	a3,a3,%lo(bucket_entry)
+	slli	a2,a1,1
+	add	a2,a2,a3
+.L65:
+	lhu	a3,0(a2)
+	andi	a3,a3,1023
+	bltu	a3,a5,.L144
+	li	s9,6
+	beq	a3,a5,.L103
+.L63:
+	lui	a3,%hi(.LANCHOR1)
+	addi	a3,a3,%lo(.LANCHOR1)
+	sw	a3,16(sp)
+	lw	a2,16(sp)
+	lui	a3,%hi(bucket_entry)
+	lui	t2,%hi(.LANCHOR0)
+	lui	s7,%hi(bucket_start)
+	addi	s3,a2,1496
+	addi	a3,a3,%lo(bucket_entry)
+	lui	a2,%hi(perm_qt_R)
+	addi	s2,a2,%lo(perm_qt_R)
+	addi	t2,t2,%lo(.LANCHOR0)
+	addi	s7,s7,%lo(bucket_start)
+	sw	a3,20(sp)
+	li	s10,5
+	sw	a5,24(sp)
+	mv	a6,a4
+	sw	s1,28(sp)
+.L97:
+	lw	s4,24(sp)
+	li	a2,3
+	lui	a5,%hi(.LANCHOR0+16)
+	mv	t0,a2
+	mv	s5,a2
+	li	a1,0
+	li	a0,0
+	li	t1,0
+	mv	s1,a6
+	li	a7,-1
+	addi	a4,a5,%lo(.LANCHOR0+16)
+	li	t5,255
+	mv	s6,a6
+.L67:
+	bne	a2,s5,.L68
+	addi	t4,a7,1
+	beq	t4,t0,.L79
+.L73:
+	li	a5,2
+	bleu	t4,a5,.L145
+.L74:
+	bne	t1,zero,.L146
+	li	a5,255
+	mv	a6,s6
+	beq	t5,a5,.L96
+	mv	s9,t5
+	j	.L97
+.L43:
+	lw	ra,92(sp)
+	lw	s0,88(sp)
+	li	a0,2
+	addi	sp,sp,96
+	jr	ra
+.L55:
+	beq	a2,zero,.L147
+	slli	a4,a7,1
+	add	a4,a4,a7
+	andi	a5,a5,4
+	mv	a2,a4
+	bne	a5,zero,.L59
+	add	a7,a3,a4
+	addi	a6,a6,1
+	j	.L60
+.L56:
+	andi	a5,a5,4
+	slli	a2,a7,1
+	bne	a5,zero,.L59
+	add	a7,a3,a2
+	addi	a6,a6,1
+	j	.L60
+.L59:
+	slli	a7,a7,2
+	add	a7,a7,a2
+	add	a7,a7,a3
+	addi	a6,a6,1
+	j	.L60
+.L145:
+	bne	t4,zero,.L148
+	lw	a3,16(sp)
+	li	a6,1
+	mv	a2,a6
+	addi	s3,a3,1496
+	lui	a3,%hi(perm_qt_R)
+	addi	s2,a3,%lo(perm_qt_R)
+	li	a5,0
+	li	a7,0
+	mv	a1,s4
+	slli	a3,s1,1
+	sw	t5,12(sp)
+	li	t6,0
+.L95:
+	slli	a1,a1,1
+	add	a3,s2,a3
+	add	a1,s3,a1
+	lhu	a1,0(a1)
+	lhu	a0,0(a3)
+	add	t4,t2,t1
+	add	t3,s8,a1
+	add	a3,s11,a0
+	lbu	a3,0(a3)
+	lbu	t3,320(t3)
+	sb	a5,0(t4)
+	mv	a5,a3
+	bgeu	a3,t3,.L81
+	mv	a5,t3
+.L81:
+	bgtu	a5,s10,.L82
+	slli	a5,a0,1
+	slli	a3,a0,1
+	add	a5,s7,a5
+	add	t3,s7,a3
+	lhu	s0,2(a5)
+	lhu	t4,0(t3)
+	bgeu	t4,s0,.L132
+	lw	a5,20(sp)
+	slli	t3,t4,1
+	add	t3,t3,a5
+.L85:
+	lhu	a5,0(t3)
+	andi	t5,a5,1023
+	bgtu	a1,t5,.L149
+	bne	a1,t5,.L132
+	srli	a5,a5,10
+	addi	s0,t1,1
+	add	a5,a5,s0
+	lw	t5,12(sp)
+	bltu	s9,a5,.L88
+.L136:
+	lw	a5,24(sp)
+	add	a2,t2,s0
+	sw	t2,12(sp)
+	sw	a5,16(sp)
+	lw	s1,28(sp)
+	sw	s6,20(sp)
+	call	finish
+	lw	t2,12(sp)
+	lw	a5,16(sp)
+	lw	a4,20(sp)
+	add	a0,a0,s0
+.L66:
+	blt	a0,zero,.L96
+	beq	a0,zero,.L98
+	lui	t1,%hi(.LANCHOR1)
+	add	a7,a0,t2
+	addi	t1,t1,%lo(.LANCHOR1)
+	li	a6,2
+	lui	t3,%hi(perm_qt_R)
+	lui	t5,%hi(perm_qt_B)
+	lui	t4,%hi(perm_qt_D)
+.L101:
+	lbu	a3,0(t2)
+	bleu	a3,a6,.L115
+	addi	a2,a3,-3
+	bleu	a2,a6,.L116
+	addi	a3,a3,-6
+	addi	a1,t1,36
+	addi	a2,t4,%lo(perm_qt_D)
+.L99:
+	addi	a3,a3,1
+.L100:
+	slli	a4,a4,1
+	slli	a5,a5,1
+	add	a4,a2,a4
+	add	a5,a1,a5
+	addi	a3,a3,-1
+	lhu	a4,0(a4)
+	lhu	a5,0(a5)
+	bne	a3,zero,.L100
+	addi	t2,t2,1
+	bne	a7,t2,.L101
+.L98:
+	or	a5,a4,a5
+	bne	a5,zero,.L96
+	sw	a0,0(s1)
+	li	a0,0
+.L141:
+	lw	ra,92(sp)
+	lw	s0,88(sp)
+	lw	s1,84(sp)
+	lw	s2,80(sp)
+	lw	s3,76(sp)
+	lw	s4,72(sp)
+	lw	s5,68(sp)
+	lw	s6,64(sp)
+	lw	s7,60(sp)
+	lw	s8,56(sp)
+	lw	s9,52(sp)
+	lw	s10,48(sp)
+	lw	s11,44(sp)
+	addi	sp,sp,96
+	jr	ra
+.L146:
+	lbu	a7,-8(a4)
+	lhu	s1,-16(a4)
+	lhu	s4,-14(a4)
+	lhu	a0,-12(a4)
+	lhu	a1,-10(a4)
+	lbu	a2,-7(a4)
+	lbu	t0,-6(a4)
+	addi	a5,a4,-16
+	addi	t1,t1,-1
+	li	a4,3
+	beq	a7,zero,.L77
+	li	a3,1
+	beq	a7,a3,.L78
+	lui	s2,%hi(perm_qt_D)
+	bne	a2,a4,.L107
+	lw	a4,16(sp)
+	addi	s2,s2,%lo(perm_qt_D)
+	addi	s3,a4,36
+	add	a4,a7,a3
+	bne	t0,a4,.L80
+	mv	a4,a5
+.L79:
+	addi	t4,a7,2
+	j	.L73
+.L106:
+	mv	a4,a5
+	lw	a5,16(sp)
+	addi	s3,a5,1496
+	lui	a5,%hi(perm_qt_R)
+	addi	s2,a5,%lo(perm_qt_R)
+.L68:
+	slli	a5,a7,1
+	addi	a2,a2,1
+	add	a5,a7,a5
+	add	a5,a2,a5
+	mv	a6,a2
+	slli	a3,a0,1
+	addi	a5,a5,-1
+	sw	t5,12(sp)
+	mv	t6,a7
+	j	.L95
+.L149:
+	addi	t4,t4,1
+	addi	t3,t3,2
+	bgtu	s0,t4,.L85
+.L132:
+	addi	a5,t1,7
+	bgtu	a5,s9,.L138
+	addi	t1,t1,1
+.L91:
+	lui	a5,%hi(perm_qt_R)
+	addi	s2,a5,%lo(perm_qt_R)
+	lw	a5,16(sp)
+	sb	a6,9(a4)
+	sb	t0,10(a4)
+	sh	s1,0(a4)
+	sh	s4,2(a4)
+	sb	t6,8(a4)
+	sh	a0,4(a4)
+	sh	a1,6(a4)
+	li	a6,1
+	addi	a4,a4,16
+	mv	a2,a6
+	addi	s3,a5,1496
+	mv	t0,a7
+	beq	a7,zero,.L114
+	mv	s1,a0
+	mv	s4,a1
+	li	a5,0
+	li	t6,0
+	li	a7,0
+	j	.L95
+.L82:
+	addi	s0,t1,1
+	add	a5,a5,s0
+	bgtu	a5,s9,.L138
+	or	a3,a3,t3
+	beq	a3,zero,.L136
+	mv	t1,s0
+	slli	a3,a0,1
+	j	.L91
+.L138:
+	lw	t5,12(sp)
+.L88:
+	bleu	t5,a5,.L67
+	mv	t5,a5
+	j	.L67
+.L114:
+	lw	t5,12(sp)
+	mv	t4,a6
+.L94:
+	lui	a5,%hi(perm_qt_D)
+	addi	s2,a5,%lo(perm_qt_D)
+	lw	a5,16(sp)
+	li	a2,1
+	mv	a6,a2
+	addi	s3,a5,36
+	li	a5,6
+	beq	t4,a2,.L70
+	mv	t0,a7
+	mv	s1,a0
+	mv	s4,a1
+	li	a7,2
+	sw	t5,12(sp)
+	li	t6,2
+	j	.L95
+.L115:
+	addi	a1,t1,1496
+	addi	a2,t3,%lo(perm_qt_R)
+	j	.L99
+.L116:
+	mv	a3,a2
+	addi	a1,s8,-1140
+	addi	a2,t5,%lo(perm_qt_B)
+	j	.L99
+.L77:
+	bne	a2,a4,.L106
+	li	a4,1
+	beq	t0,a4,.L69
+	mv	a0,s1
+	mv	a1,s4
+	mv	a4,a5
+	mv	a7,t0
+	slli	a3,s1,1
+.L70:
+	li	a6,1
+	mv	s1,a0
+	lui	a0,%hi(perm_qt_B)
+	mv	t0,a7
+	mv	a2,a6
+	mv	a7,a6
+	mv	s4,a1
+	li	a5,3
+	addi	s3,s8,-1140
+	addi	s2,a0,%lo(perm_qt_B)
+	sw	t5,12(sp)
+	mv	t6,a6
+	j	.L95
+.L148:
+	mv	a0,s1
+	mv	a1,s4
+	mv	a7,t0
+	slli	a3,s1,1
+	j	.L94
+.L96:
+	li	a0,1
+	j	.L141
+.L62:
+	or	a2,a2,a0
+	bne	a2,zero,.L63
+.L103:
+	lui	t2,%hi(.LANCHOR0)
+	addi	t2,t2,%lo(.LANCHOR0)
+	mv	a2,t2
+	mv	a1,a5
+	mv	a0,a4
+	sw	t2,20(sp)
+	sw	a5,16(sp)
+	sw	a4,12(sp)
+	call	finish
+	lw	a4,12(sp)
+	lw	a5,16(sp)
+	lw	t2,20(sp)
+	j	.L66
+.L147:
+	slli	a5,a7,2
+	add	a7,a5,a7
+	addi	a6,a6,1
+	add	a7,a3,a7
+	j	.L60
+.L107:
+	mv	a4,a5
+	lw	a5,16(sp)
+	lui	s2,%hi(perm_qt_D)
+	addi	s2,s2,%lo(perm_qt_D)
+	addi	s3,a5,36
+	j	.L68
+.L78:
+	li	a4,3
+	li	a3,2
+	bne	a2,a4,.L109
+	bne	t0,a3,.L69
+	lui	s2,%hi(perm_qt_B)
+	addi	s2,s2,%lo(perm_qt_B)
+	addi	s3,s8,-1140
+.L80:
+	mv	a4,a5
+	j	.L74
+.L69:
+	lw	a3,16(sp)
+	li	a6,1
+	lui	s2,%hi(perm_qt_D)
+	mv	a4,a5
+	addi	s3,a3,36
+	mv	a2,a6
+	li	a7,2
+	addi	s2,s2,%lo(perm_qt_D)
+	mv	a1,s4
+	li	a5,6
+	slli	a3,s1,1
+	sw	t5,12(sp)
+	li	t6,2
+	j	.L95
+.L144:
+	addi	a1,a1,1
+	addi	a2,a2,2
+	bgtu	a0,a1,.L65
+.L104:
+	li	s9,6
+	j	.L63
+.L109:
+	lui	s2,%hi(perm_qt_B)
+	mv	a4,a5
+	addi	s2,s2,%lo(perm_qt_B)
+	addi	s3,s8,-1140
+	j	.L68
+	.size	solve, .-solve
+	.section	.rodata.str1.4
 	.align	2
-.LC1:
-	.string	"\n"
+.LC2:
+	.string	"test "
+	.align	2
+.LC3:
+	.string	": "
+	.align	2
+.LC4:
+	.string	" PASS "
+	.align	2
+.LC5:
+	.string	"rejected"
+	.align	2
+.LC6:
+	.string	" moves: "
+	.align	2
+.LC7:
+	.string	" FAIL "
 	.text
 	.align	2
 	.globl	_start
 	.type	_start, @function
 _start:
-	addi	sp,sp,-112
-	sw	s9,68(sp)
-	lui	a4,%hi(oris)
-	lui	s9,%hi(.LANCHOR1)
-	addi	s9,s9,%lo(.LANCHOR1)
-	addi	a4,a4,%lo(oris)
-	lui	t0,%hi(pos)
-	sw	ra,108(sp)
-	addi	a3,s9,284
-	addi	t6,s9,291
-	mv	a6,a4
-	addi	a0,t0,%lo(pos)
-	li	a1,0
-	li	a2,0
-	li	t4,6
-	li	t3,1
-	li	t5,2
-.L38:
-	lbu	a5,0(a3)
-	addi	a5,a5,-49
-	sll	t1,t3,a5
-	and	a7,t1,a2
-	bgtu	a5,t4,.L36
-	bne	a7,zero,.L36
-	lbu	a7,7(a3)
-	sb	a5,0(a0)
-	addi	a3,a3,1
-	addi	a5,a7,-49
-	bgtu	a5,t5,.L36
-	sb	a5,0(a6)
-	add	a1,a1,a5
-	addi	a6,a6,1
-	addi	a0,a0,1
-	or	a2,a2,t1
-	bne	t6,a3,.L38
-	li	a5,11
-	bleu	a1,a5,.L39
-	addi	a1,a1,-12
-.L39:
-	li	a5,5
-	bleu	a1,a5,.L40
-	addi	a1,a1,-6
-.L40:
-	li	a5,2
-	bleu	a1,a5,.L41
-	addi	a1,a1,-3
-.L41:
-	bne	a1,zero,.L36
-	lui	a1,%hi(pos+6)
-	sw	s5,84(sp)
-	sw	s0,104(sp)
-	sw	s1,100(sp)
-	sw	s4,88(sp)
-	sw	s7,76(sp)
-	sw	s8,72(sp)
-	sw	s10,64(sp)
-	sw	s11,60(sp)
-	addi	a0,t0,%lo(pos)
-	addi	a1,a1,%lo(pos+6)
-	li	s5,0
-	li	a6,0
-	li	t1,7
-	li	t3,8
-.L42:
-	addi	a6,a6,1
-	beq	a6,t1,.L139
-.L44:
-	lbu	a7,0(a0)
-	mv	a5,a0
-	li	a2,0
-.L47:
-	lbu	a3,1(a5)
+	addi	sp,sp,-80
+	sw	s5,52(sp)
+	lui	s5,%hi(.LANCHOR2)
+	sw	s1,68(sp)
+	sw	s2,64(sp)
+	sw	s3,60(sp)
+	sw	s10,32(sp)
+	addi	s5,s5,%lo(.LANCHOR2)
+	lui	s10,%hi(test_fail)
+	lui	s3,%hi(.LC2)
+	lui	s2,%hi(.LC3)
+	lui	s1,%hi(.LC7)
+	sw	s0,72(sp)
+	sw	s4,56(sp)
+	sw	s7,44(sp)
+	sw	s8,40(sp)
+	sw	s9,36(sp)
+	sw	s11,28(sp)
+	sw	ra,76(sp)
+	lui	s7,%hi(.LC1)
+	addi	s0,s5,1052
+	sw	zero,%lo(test_fail)(s10)
+	addi	s3,s3,%lo(.LC2)
+	addi	s2,s2,%lo(.LC3)
+	addi	s1,s1,%lo(.LC7)
+	li	s11,0
+	lui	s8,%hi(.LC4)
+	lui	s9,%hi(.LC5)
+	li	s4,255
+.L155:
+	sw	zero,12(sp)
+	mv	a0,s3
+	li	a7,4
+ #APP
+# 86 "c_reference/solver_ref.c" 1
+	ecall
+# 0 "" 2
+ #NO_APP
+	addi	s11,s11,1
+	mv	a0,s11
+	li	a7,1
+ #APP
+# 94 "c_reference/solver_ref.c" 1
+	ecall
+# 0 "" 2
+ #NO_APP
+	li	a7,4
+	mv	a0,s2
+ #APP
+# 86 "c_reference/solver_ref.c" 1
+	ecall
+# 0 "" 2
+ #NO_APP
+	mv	a0,s0
+ #APP
+# 86 "c_reference/solver_ref.c" 1
+	ecall
+# 0 "" 2
+ #NO_APP
+	addi	a1,sp,12
+	call	solve
+	lbu	a5,15(s0)
+	mv	a3,a0
+	li	a7,4
+	mv	a0,s1
+	beq	a5,s4,.L162
+	bne	a3,zero,.L152
+	lw	a3,12(sp)
+	beq	a5,a3,.L163
+.L152:
+	lw	a5,%lo(test_fail)(s10)
 	addi	a5,a5,1
-	sltu	a3,a3,a7
-	add	a2,a2,a3
-	bne	a1,a5,.L47
-	sub	a5,t3,a6
-	andi	a3,a5,1
-	andi	a7,a5,2
-	bne	a3,zero,.L48
-	bne	a7,zero,.L49
-	slli	s5,s5,2
-	addi	a6,a6,1
-	add	s5,a2,s5
-	addi	a0,a0,1
-	bne	a6,t1,.L44
-.L139:
-	addi	a2,a4,6
-	li	s1,0
-.L45:
-	lbu	a5,0(a4)
-	slli	a3,s1,1
-	add	s1,a3,s1
-	addi	a4,a4,1
-	add	s1,a5,s1
-	bne	a2,a4,.L45
-	lui	a4,%hi(h_perm)
-	slli	a7,s5,16
-	slli	a5,s1,16
-	srli	a7,a7,16
-	srli	a5,a5,16
-	addi	s11,a4,%lo(h_perm)
-	add	a4,s11,a7
-	add	a3,s9,a5
-	lbu	a4,0(a4)
-	lbu	a3,300(a3)
-	lui	a1,%hi(root_p)
-	lui	a2,%hi(root_o)
-	sh	s5,%lo(root_p)(a1)
-	sh	s1,%lo(root_o)(a2)
-	mv	s10,a4
-	bgeu	a4,a3,.L53
-	mv	s10,a3
-.L53:
-	li	a2,5
-	bgtu	s10,a2,.L54
-	lui	s8,%hi(bucket_start)
-	addi	a3,a7,1
-	addi	s8,s8,%lo(bucket_start)
-	slli	a4,a7,1
-	slli	a3,a3,1
-	add	a2,s8,a4
-	add	a3,s8,a3
-	lhu	a2,0(a2)
-	lhu	a1,0(a3)
-	lui	a0,%hi(bucket_entry)
-	addi	a6,a0,%lo(bucket_entry)
-.L55:
-	slli	a3,a2,1
-	add	a3,a6,a3
-	bleu	a1,a2,.L140
-	lhu	a3,0(a3)
-	andi	a3,a3,1023
-	bltu	a3,a5,.L141
-	li	s10,6
-	beq	a3,a5,.L58
-.L57:
-	lui	a3,%hi(.LANCHOR0)
-	addi	s7,a3,%lo(.LANCHOR0)
-	lui	a3,%hi(perm_qt_R)
-	addi	a3,a3,%lo(perm_qt_R)
-	sw	a3,44(sp)
-	addi	a2,s7,1460
-	lw	a0,44(sp)
-	sw	a2,8(sp)
-	lui	a1,%hi(perm_qt_D)
-	lui	a2,%hi(.LANCHOR1-1176)
-	lui	a3,%hi(perm_qt_B)
-	lui	s4,%hi(.LANCHOR2)
-	addi	a1,a1,%lo(perm_qt_D)
-	addi	a2,a2,%lo(.LANCHOR1-1176)
-	addi	a3,a3,%lo(perm_qt_B)
-	sw	s2,96(sp)
-	sw	s3,92(sp)
-	sw	s6,80(sp)
-	addi	s3,s7,1460
-	sw	s7,16(sp)
-	mv	s2,a0
-	addi	s4,s4,%lo(.LANCHOR2)
-	sw	a1,24(sp)
-	sw	a2,40(sp)
-	sw	a3,36(sp)
-	sw	s1,28(sp)
-	sw	a7,20(sp)
-	sw	a5,12(sp)
-	mv	t1,s5
-	sw	a4,32(sp)
-	mv	s7,a0
-	mv	s6,a6
-.L91:
-	lw	s5,12(sp)
-	lw	s1,20(sp)
-	li	a6,3
-	mv	t2,a6
-	li	a1,0
-	li	a0,0
-	li	t3,0
-	li	a7,-1
-	mv	a3,s4
-	li	t6,255
-	mv	t0,t1
-.L61:
-	li	a5,3
-	bne	a6,a5,.L62
-	addi	t4,a7,1
-	beq	t4,t2,.L65
-.L69:
-	li	a5,2
-	bleu	t4,a5,.L142
-.L70:
-	bne	t3,zero,.L143
-	li	a5,255
-	mv	t1,t0
-	beq	t6,a5,.L135
-	mv	s10,t6
-	j	.L91
-.L36:
-	li	a0,2
-.L43:
+	sw	a5,%lo(test_fail)(s10)
+ #APP
+# 86 "c_reference/solver_ref.c" 1
+	ecall
+# 0 "" 2
+ #NO_APP
+	addi	a0,s7,%lo(.LC1)
+ #APP
+# 86 "c_reference/solver_ref.c" 1
+	ecall
+# 0 "" 2
+ #NO_APP
+.L154:
+	lbu	a5,16(s0)
+	addi	s0,s0,16
+	bne	a5,zero,.L155
+	addi	a1,sp,12
+	addi	a0,s5,1132
+	sw	zero,12(sp)
+	call	solve
+	mv	s0,a0
+	beq	a0,zero,.L164
+.L156:
+	lw	a5,%lo(test_fail)(s10)
+	beq	a5,zero,.L157
+	li	s0,1
+.L157:
+	mv	a0,s0
 	li	a7,93
  #APP
-# 72 "c_reference/solver_ref.c" 1
+# 101 "c_reference/solver_ref.c" 1
 	ecall
 # 0 "" 2
  #NO_APP
-.L98:
-	j	.L98
-.L48:
-	beq	a7,zero,.L144
-	slli	a3,s5,1
-	add	a3,a3,s5
-	andi	a5,a5,4
-	mv	a7,a3
-	bne	a5,zero,.L52
-	add	s5,a2,a3
-	addi	a0,a0,1
-	j	.L42
-.L49:
-	andi	a5,a5,4
-	slli	a7,s5,1
-	bne	a5,zero,.L52
-	add	s5,a2,a7
-	addi	a0,a0,1
-	j	.L42
-.L52:
-	slli	s5,s5,2
-	add	s5,s5,a7
-	add	s5,s5,a2
-	addi	a0,a0,1
-	j	.L42
-.L142:
-	bne	t4,zero,.L145
-	lw	s3,8(sp)
-	li	t1,1
-	mv	a6,t1
-	li	a7,0
-	mv	a1,s5
-	li	a5,0
-	mv	s2,s7
-	slli	a4,s1,1
-	sw	t6,4(sp)
-	li	t5,0
-.L89:
-	slli	a1,a1,1
-	add	a4,s2,a4
-	add	a1,s3,a1
-	lhu	a1,0(a1)
-	lhu	a0,0(a4)
-	add	t4,s4,t3
-	add	a2,s9,a1
-	add	a4,s11,a0
-	lbu	a4,0(a4)
-	lbu	a2,300(a2)
-	sb	a5,192(t4)
-	mv	a5,a4
-	bgeu	a4,a2,.L75
-	mv	a5,a2
-.L75:
-	li	t4,5
-	bgtu	a5,t4,.L76
-	addi	a5,a0,1
-	slli	a5,a5,1
-	slli	a4,a0,1
-	add	a5,s8,a5
-	add	a2,s8,a4
-	lhu	s0,0(a5)
-	lhu	t4,0(a2)
-	bgeu	t4,s0,.L125
-	slli	a2,t4,1
-	add	a2,s6,a2
-.L79:
-	lhu	a5,0(a2)
-	andi	t6,a5,1023
-	bgtu	a1,t6,.L146
-	bne	a1,t6,.L125
-	srli	a5,a5,10
-	addi	s0,t3,1
-	add	a5,a5,s0
-	lw	t6,4(sp)
-	bltu	s10,a5,.L82
-.L131:
-	lw	a5,12(sp)
-	lw	a4,32(sp)
-	addi	s4,s4,192
-	add	a2,s4,s0
-	sw	a4,12(sp)
-	sw	a5,4(sp)
-	lw	s1,28(sp)
-	lw	s7,16(sp)
-	mv	s5,t0
-	call	finish
-	lw	a5,4(sp)
-	lw	a4,12(sp)
-	lw	s2,96(sp)
-	lw	s3,92(sp)
-	lw	s6,80(sp)
-	add	s0,a0,s0
-.L60:
-	blt	s0,zero,.L90
-	beq	s0,zero,.L92
-	mv	a0,s4
-	lbu	a3,0(a0)
-	li	a6,2
-	lw	t4,36(sp)
-	lw	t5,24(sp)
-	lw	a7,44(sp)
-	lw	t3,8(sp)
-	lw	t6,40(sp)
-	add	t1,s0,s4
-	bleu	a3,a6,.L110
-.L148:
-	addi	a2,a3,-3
-	bleu	a2,a6,.L111
-	addi	a3,a3,-6
-	mv	a1,s7
-	mv	a2,t5
-.L93:
-	addi	a3,a3,1
-	j	.L94
-.L147:
-	slli	a4,a4,1
-.L94:
-	slli	a5,a5,1
-	add	a5,a1,a5
-	add	a4,a2,a4
-	addi	a3,a3,-1
-	lhu	a5,0(a5)
-	lhu	a4,0(a4)
-	bne	a3,zero,.L147
-	addi	a0,a0,1
-	beq	t1,a0,.L128
-	lbu	a3,0(a0)
-	slli	a4,a4,1
-	bgtu	a3,a6,.L148
-.L110:
-	mv	a1,t3
-	mv	a2,a7
-	j	.L93
-.L143:
-	lbu	a7,-8(a3)
-	lhu	s1,-16(a3)
-	lhu	s5,-14(a3)
-	lhu	a0,-12(a3)
-	lhu	a1,-10(a3)
-	lbu	a6,-7(a3)
-	lbu	t2,-6(a3)
-	addi	t3,t3,-1
-	addi	a5,a3,-16
-	li	a4,3
-	beq	a7,zero,.L73
-	li	a3,1
-	beq	a7,a3,.L149
-	addi	a3,a7,1
-	bne	a6,a4,.L102
-	lw	s2,24(sp)
-	lw	s3,16(sp)
-	bne	t2,a3,.L66
-	mv	a3,a5
-.L65:
-	addi	t4,a7,2
-	j	.L69
-.L101:
-	lw	s3,8(sp)
-	mv	a3,a5
-	mv	s2,s7
-.L62:
-	slli	a5,a7,1
-	addi	a6,a6,1
-	add	a5,a7,a5
-	add	a5,a6,a5
-	mv	t1,a6
-	slli	a4,a0,1
-	addi	a5,a5,-1
-	sw	t6,4(sp)
-	mv	t5,a7
-	j	.L89
-.L146:
-	addi	t4,t4,1
-	addi	a2,a2,2
-	bgtu	s0,t4,.L79
-.L125:
-	addi	a5,t3,7
-	bgtu	a5,s10,.L133
-	addi	t3,t3,1
-.L85:
-	sb	t5,8(a3)
-	sb	t1,9(a3)
-	sb	t2,10(a3)
-	sh	s1,0(a3)
-	sh	s5,2(a3)
-	sh	a0,4(a3)
-	sh	a1,6(a3)
-	li	a6,1
-	lw	s3,8(sp)
-	addi	a3,a3,16
-	mv	t1,a6
-	mv	s2,s7
-	li	t5,0
-	li	a5,0
-	mv	t2,a7
-	beq	a7,zero,.L109
-	mv	s1,a0
-	mv	s5,a1
-	li	a7,0
-	j	.L89
-.L76:
-	addi	s0,t3,1
-	add	a5,a5,s0
-	bgtu	a5,s10,.L133
-	or	a4,a4,a2
-	beq	a4,zero,.L131
-	mv	t3,s0
-	slli	a4,a0,1
-	j	.L85
-.L133:
-	lw	t6,4(sp)
-.L82:
-	bleu	t6,a5,.L61
-	mv	t6,a5
-	j	.L61
-.L109:
-	lw	t6,4(sp)
-	mv	t4,t1
-.L88:
-	li	a6,1
-	lw	s2,24(sp)
-	lw	s3,16(sp)
-	mv	t1,a6
-	li	a5,6
-	beq	t4,a6,.L64
-	mv	t2,a7
-	mv	s1,a0
-	mv	s5,a1
-	li	a7,2
-	sw	t6,4(sp)
-	li	t5,2
-	j	.L89
-.L111:
-	mv	a3,a2
-	mv	a1,t6
-	mv	a2,t4
-	j	.L93
-.L73:
-	bne	a6,a4,.L101
-	li	a4,1
-	beq	t2,a4,.L63
-	mv	a0,s1
-	mv	a1,s5
-	mv	a3,a5
-	mv	a7,t2
-	slli	a4,s1,1
-.L64:
-	li	t1,1
-	mv	t2,a7
-	lw	s3,40(sp)
-	lw	s2,36(sp)
-	mv	s1,a0
-	mv	a6,t1
-	mv	a7,t1
-	mv	s5,a1
-	li	a5,3
-	sw	t6,4(sp)
-	mv	t5,t1
-	j	.L89
-.L128:
-	or	a7,a4,a5
-	beq	a7,zero,.L150
-.L90:
-	li	a0,1
-.L137:
-	lw	s0,104(sp)
-	lw	s1,100(sp)
-	lw	s4,88(sp)
-	lw	s5,84(sp)
-	lw	s7,76(sp)
-	lw	s8,72(sp)
-	lw	s10,64(sp)
-	lw	s11,60(sp)
-	j	.L43
-.L144:
-	slli	a5,s5,2
-	add	s5,a5,s5
-	addi	a0,a0,1
-	add	s5,s5,a2
-	j	.L42
-.L145:
-	mv	a0,s1
-	mv	a1,s5
-	mv	a7,t2
-	slli	a4,s1,1
-	j	.L88
-.L54:
-	or	a4,a4,a3
-	beq	a4,zero,.L118
-	lui	a4,%hi(bucket_entry)
-	lui	s8,%hi(bucket_start)
-	addi	a6,a4,%lo(bucket_entry)
-	addi	s8,s8,%lo(bucket_start)
-	slli	a4,a7,1
-	j	.L57
-.L102:
-	lw	s3,16(sp)
-	lw	s2,24(sp)
-	mv	a3,a5
-	j	.L62
-.L118:
-	slli	a4,a7,1
-.L58:
-	lui	s4,%hi(.LANCHOR2+192)
-	addi	s4,s4,%lo(.LANCHOR2+192)
-	mv	a0,a7
-	mv	a2,s4
-	mv	a1,a5
-	sw	a4,12(sp)
-	sw	a5,4(sp)
-	call	finish
-	lui	t1,%hi(.LANCHOR0+1460)
-	addi	a5,t1,%lo(.LANCHOR0+1460)
-	lui	a7,%hi(perm_qt_R)
-	lui	a6,%hi(perm_qt_D)
-	sw	a5,8(sp)
-	addi	a5,a7,%lo(perm_qt_R)
-	lui	a2,%hi(.LANCHOR1-1176)
-	sw	a5,44(sp)
-	addi	a5,a6,%lo(perm_qt_D)
-	lui	a3,%hi(perm_qt_B)
-	sw	a5,24(sp)
-	addi	a5,a2,%lo(.LANCHOR1-1176)
-	lui	t3,%hi(.LANCHOR0)
-	sw	a5,40(sp)
-	addi	a5,a3,%lo(perm_qt_B)
-	sw	a5,36(sp)
-	lw	a4,12(sp)
-	lw	a5,4(sp)
-	mv	s0,a0
-	addi	s7,t3,%lo(.LANCHOR0)
-	j	.L60
-.L150:
-	lui	a5,%hi(.LANCHOR1+1032)
-	lui	a4,%hi(.LC0)
-	addi	a5,a5,%lo(.LANCHOR1+1032)
-	addi	a4,a4,%lo(.LC0)
-	j	.L96
-.L151:
-	addi	s4,s4,1
-	mv	a0,a4
+.L158:
+	j	.L158
+.L162:
+	li	a5,2
+	bne	a3,a5,.L152
+	addi	a0,s8,%lo(.LC4)
  #APP
-# 65 "c_reference/solver_ref.c" 1
+# 86 "c_reference/solver_ref.c" 1
 	ecall
 # 0 "" 2
  #NO_APP
-.L96:
-	lbu	a0,0(s4)
-	li	a7,4
-	slli	a0,a0,2
-	add	a0,a5,a0
+	addi	a0,s9,%lo(.LC5)
  #APP
-# 65 "c_reference/solver_ref.c" 1
+# 86 "c_reference/solver_ref.c" 1
 	ecall
 # 0 "" 2
  #NO_APP
-	addi	a3,a3,1
-	bne	s0,a3,.L151
-.L97:
-	lui	a0,%hi(.LC1)
-	addi	a0,a0,%lo(.LC1)
+	addi	a0,s7,%lo(.LC1)
+ #APP
+# 86 "c_reference/solver_ref.c" 1
+	ecall
+# 0 "" 2
+ #NO_APP
+	j	.L154
+.L164:
+	lw	a0,12(sp)
+	call	print_solution
+	j	.L156
+.L163:
+	addi	a0,s8,%lo(.LC4)
 	li	a7,4
  #APP
-# 65 "c_reference/solver_ref.c" 1
+# 86 "c_reference/solver_ref.c" 1
 	ecall
 # 0 "" 2
  #NO_APP
-	li	a0,0
-	j	.L137
-.L149:
-	li	a3,2
-	bne	a6,a4,.L104
-	bne	t2,a3,.L63
-	lw	s3,40(sp)
-	lw	s2,36(sp)
-.L66:
-	mv	a3,a5
-	j	.L70
-.L63:
-	li	t1,1
-	mv	a3,a5
-	lw	s3,16(sp)
-	lw	s2,24(sp)
-	mv	a6,t1
-	li	a7,2
-	mv	a1,s5
-	li	a5,6
-	slli	a4,s1,1
-	sw	t6,4(sp)
-	li	t5,2
-	j	.L89
-.L141:
-	addi	a2,a2,1
-	j	.L55
-.L135:
-	lw	s2,96(sp)
-	lw	s3,92(sp)
-	lw	s6,80(sp)
-	j	.L90
-.L104:
-	lw	s3,40(sp)
-	lw	s2,36(sp)
-	mv	a3,a5
-	j	.L62
-.L92:
-	or	a5,s1,s5
-	slli	a5,a5,16
-	srli	a5,a5,16
-	bne	a5,zero,.L90
-	j	.L97
-.L140:
-	li	s10,6
-	j	.L57
+	li	a7,1
+	lw	a0,12(sp)
+ #APP
+# 94 "c_reference/solver_ref.c" 1
+	ecall
+# 0 "" 2
+ #NO_APP
+	lui	a5,%hi(.LC6)
+	li	a7,4
+	addi	a0,a5,%lo(.LC6)
+ #APP
+# 86 "c_reference/solver_ref.c" 1
+	ecall
+# 0 "" 2
+ #NO_APP
+	lw	a0,12(sp)
+	call	print_solution
+	j	.L154
 	.size	_start, .-_start
 	.section	.rodata
 	.align	2
-	.set	.LANCHOR0,. + 0
-	.set	.LANCHOR1,. + 4096
+	.set	.LANCHOR1,. + 0
+	.set	.LANCHOR2,. + 4096
+	.type	names, @object
+	.size	names, 36
+names:
+	.string	"R"
+	.zero	2
+	.string	"R2"
+	.zero	1
+	.string	"R'"
+	.zero	1
+	.string	"B"
+	.zero	2
+	.string	"B2"
+	.zero	1
+	.string	"B'"
+	.zero	1
+	.string	"D"
+	.zero	2
+	.string	"D2"
+	.zero	1
+	.string	"D'"
+	.zero	1
 	.type	ori_qt_D, @object
 	.size	ori_qt_D, 1458
 ori_qt_D:
@@ -3007,11 +3185,6 @@ ori_qt_B:
 	.half	704
 	.half	706
 	.zero	2
-	.type	input, @object
-	.size	input, 16
-input:
-	.string	"21345671111111"
-	.zero	1
 	.type	h_ori, @object
 	.size	h_ori, 729
 h_ori:
@@ -3019,26 +3192,24 @@ h_ori:
 	.base64	"AwUEBAUFBgQDBAQEBAIFBAQEBAUEBAQEBAUFBAMFBQUFBAUCBAUDBAUDBAUFBAUFAwQEBAUGBAUEBQMFBAUFBQQFBAUEAwMFAwQEBQUEBAQFBQQFBAQDAwUEBAUDBQIEBAUEBAQFBQUFBQQFBAUEBQQFBQQFBQUFBAUFBAUDBAQFBAQFBAUFBQMEAwMEAgMDBQQEBQUEBQUCBQQEBQQEBAQFBQUCBQUFBAUEAQUGBQIFBQQDBAUEBQUEBQYDBAQEBAQFBAQFAwQFBAQDBQUFBAUEBQUGBQQGBQUFBQQFBQUFAwUEBQQEBQUDBAUFBAQEBQQFBAUEBQQEBQQEBQUE"
 	.base64	"BAUFBAUFAwQEBAQEBAUFBQUFBQMEBQYEBQUFBAQFBAUEBAUFBAQFBQQFBQQGBAQFBAUGBQYGBQUEBQIFBQUFBQMEAwQFBQQEAwYGBQUFBQUGBAQFBQQEBQYFBQQFBgUDBAQFBQUGBQYEBQUFBgQEBQQEBAQFBAQFBAUEAwQFBQUFBQUFBAQFBAQFAwUDBAMFBAQFBAUFBQIEBAMEAwQEBQMEBQUEBQQFBAUEBQUFBAUFBQUFBgUEBQYFBAUDBQUEAwQEBAUEBAUEBQYFBAUFBAQFBQUEBQQFAwUF"
 	.zero	3
-	.type	names, @object
-	.size	names, 36
-names:
-	.string	"R"
-	.zero	2
-	.string	"R2"
-	.zero	1
-	.string	"R'"
-	.zero	1
-	.string	"B"
-	.zero	2
-	.string	"B2"
-	.zero	1
-	.string	"B'"
-	.zero	1
-	.string	"D"
-	.zero	2
-	.string	"D2"
-	.zero	1
-	.string	"D'"
+	.type	tests, @object
+	.size	tests, 80
+tests:
+	.string	"12345671111111"
+	.byte	0
+	.string	"24173562322133"
+	.byte	3
+	.string	"21345671111111"
+	.byte	11
+	.string	"11345671111111"
+	.byte	-1
+	.string	""
+	.zero	14
+	.byte	0
+	.type	input, @object
+	.size	input, 16
+input:
+	.string	"21345671111111"
 	.zero	1
 	.type	h_perm, @object
 	.size	h_perm, 5040
@@ -35466,15 +35637,15 @@ perm_qt_R:
 	.half	3935
 	.bss
 	.align	2
-	.set	.LANCHOR2,. + 0
-	.type	frames, @object
-	.size	frames, 192
-frames:
-	.zero	192
+	.set	.LANCHOR0,. + 0
 	.type	moves, @object
 	.size	moves, 16
 moves:
 	.zero	16
+	.type	frames, @object
+	.size	frames, 192
+frames:
+	.zero	192
 	.section	.sbss,"aw",@nobits
 	.align	2
 	.type	oris, @object
@@ -35493,5 +35664,9 @@ root_o:
 	.size	root_p, 2
 root_p:
 	.zero	2
+	.type	test_fail, @object
+	.size	test_fail, 4
+test_fail:
+	.zero	4
 	.ident	"GCC: (xPack GNU RISC-V Embedded GCC x86_64) 15.2.0"
 	.section	.note.GNU-stack,"",@progbits

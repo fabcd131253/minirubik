@@ -22,8 +22,11 @@
  *   host：cc -O2 -std=c99 solver_ref.c -o solver_ref
  *         -DTABLES_IDA          使用 tables_ida.h（只用 PDB 的 IDA*）
  *         -DINPUT='"…"'        改變輸入（預設與 solver.s 相同）
- *   RV32I：見 1_submission/Makefile 的 rv32 目標（本機沒有工具鏈，未驗證）
+ *         -DRUN_TESTS=0         一般模式：只處理 input（預設 1：先跑內建測試）
+ *   RV32I：見 1_submission/Makefile 的 rv32、elf 目標
  * 輸出：解答與換行；結束碼 0 成功、1 搜尋或驗證失敗、2 輸入不合法（與 solver.s 相同）
+ * 測試模式：先依序執行 tests 表中的案例，每個案例印一行 PASS／FAIL（格式與 solver.s 相同），
+ *   任何測試失敗時結束碼為 1。
  */
 #include <stdint.h>
 
@@ -36,10 +39,28 @@
 #ifndef INPUT
 #define INPUT "21345671111111" /* PPPPPPPOOOOOOO */
 #endif
+#ifndef RUN_TESTS
+#define RUN_TESTS 1 /* 1：先跑內建測試；0：只處理 input（量測 --iret 時使用） */
+#endif
 
 /* ---- 資料（對應 solver.s 的 .data） ---- */
 
 static const char input[16] = INPUT; /* 固定 16 bytes：讀 input[14] 不會越界 */
+
+/* 內建測試案例，與 solver.s 的 tests 表相同：狀態 15 bytes（含 NUL）+ 預期結果 1 byte
+ *   預期結果 0~11：預期的最短步數；255：預期被拒絕。以 state[0] == 0 的一筆作為結尾 */
+typedef struct {
+    char state[15];
+    uint8_t expect;
+} Test;
+static const Test tests[] = {
+    {"12345671111111", 0},   /* 已還原 */
+    {"24173562322133", 3},   /* 短打亂：R B' D2，真實距離 3 */
+    {"21345671111111", 11},  /* 距離 11 */
+    {"11345671111111", 255}, /* 不合法：角塊 1 重複 */
+    {"", 0},                 /* 結尾 */
+};
+static uint32_t test_fail; /* 失敗的個數 */
 static uint16_t root_p, root_o;
 static uint8_t pos[8];   /* 解析後的排列 */
 static uint8_t oris[8];  /* 解析後的方向 */
@@ -65,6 +86,14 @@ static void print_str(const char *s)
     __asm__ volatile("ecall" : : "r"(a0), "r"(a7) : "memory");
 }
 
+/* a7 = 1：印出 a0 的整數值 */
+static void print_int(int value)
+{
+    register int a0 __asm__("a0") = value;
+    register int a7 __asm__("a7") = 1;
+    __asm__ volatile("ecall" : : "r"(a0), "r"(a7) : "memory");
+}
+
 static void exit_with(int code)
 {
     register int a0 __asm__("a0") = code;
@@ -80,6 +109,11 @@ static void exit_with(int code)
 static void print_str(const char *s)
 {
     fputs(s, stdout);
+}
+
+static void print_int(int value)
+{
+    printf("%d", value);
 }
 
 static void exit_with(int code)
@@ -103,14 +137,14 @@ static uint32_t times_small(uint32_t x, uint32_t k)
     return r;
 }
 
-/* ---- parse：解析 input、檢查合法性，算出排列索引 p 與方向索引 o ----
+/* ---- parse：解析 s 指向的 14 字元字串、檢查合法性，算出排列索引 p 與方向索引 o ----
  * 回傳 0 成功，1 不合法。檢查的順序和 solver.s 相同。 */
-static uint32_t parse(uint32_t *p_out, uint32_t *o_out)
+static uint32_t parse(const char *s, uint32_t *p_out, uint32_t *o_out)
 {
     uint32_t seen = 0, sum = 0;
     for (uint32_t i = 0; i < 7; i++) {
         /* 比 '1' 小的字元（含 NUL）減完會變成很大的無號數 */
-        uint32_t c = (uint32_t) (uint8_t) input[i] - 49u;
+        uint32_t c = (uint32_t) (uint8_t) s[i] - 49u;
         if (c >= 7)
             return 1;
         uint32_t bit = 1u << c;
@@ -118,13 +152,13 @@ static uint32_t parse(uint32_t *p_out, uint32_t *o_out)
             return 1;
         seen |= bit;
         pos[i] = (uint8_t) c;
-        uint32_t d = (uint32_t) (uint8_t) input[i + 7] - 49u;
+        uint32_t d = (uint32_t) (uint8_t) s[i + 7] - 49u;
         if (d >= 3)
             return 1;
         sum += d;
         oris[i] = (uint8_t) d;
     }
-    if (input[14] != 0) /* 長度必須剛好 14 */
+    if (s[14] != 0) /* 長度必須剛好 14 */
         return 1;
     if (sum >= 12) /* sum mod 3（sum <= 14） */
         sum -= 12;
@@ -346,21 +380,67 @@ static void print_solution(uint32_t len)
     print_str("\n");
 }
 
-/* ---- main：對應 solver.s 的 main ---- */
-static int solver_main(void)
+/* ---- solve：對應 solver.s 的 solve ----
+ * 回傳 0 成功（*len = 步數，moves 已填好且已驗證）、1 搜尋或驗證失敗、2 輸入不合法 */
+static int solve(const char *s, uint32_t *len)
 {
     uint32_t p, o;
-    if (parse(&p, &o))
+    if (parse(s, &p, &o))
         return 2;
     root_p = (uint16_t) p;
     root_o = (uint16_t) o;
-    int32_t len = search();
-    if (len < 0)
+    int32_t n = search();
+    if (n < 0)
         return 1;
-    if (verify((uint32_t) len))
+    if (verify((uint32_t) n))
         return 1;
-    print_solution((uint32_t) len);
+    *len = (uint32_t) n;
     return 0;
+}
+
+/* ---- run_tests：對應 solver.s 的 run_tests，輸出格式相同 ---- */
+static void run_tests(void)
+{
+    test_fail = 0;
+    for (uint32_t k = 0; tests[k].state[0] != 0; k++) {
+        uint32_t len = 0;
+        print_str("test ");
+        print_int((int) (k + 1));
+        print_str(": ");
+        print_str(tests[k].state);
+        int status = solve(tests[k].state, &len);
+        if (tests[k].expect == 255) {        /* 預期被拒絕 */
+            if (status == 2) {
+                print_str(" PASS ");
+                print_str("rejected");
+                print_str("\n");
+                continue;
+            }
+        } else if (status == 0 && len == tests[k].expect) { /* 預期的最短步數 */
+            print_str(" PASS ");
+            print_int((int) len);
+            print_str(" moves: ");
+            print_solution(len);
+            continue;
+        }
+        test_fail++;
+        print_str(" FAIL ");
+        print_str("\n");
+    }
+}
+
+/* ---- main：對應 solver.s 的 main ---- */
+static int solver_main(void)
+{
+    if (RUN_TESTS)
+        run_tests();
+    uint32_t len = 0;
+    int status = solve(input, &len);
+    if (status == 0)
+        print_solution(len);
+    if (test_fail)
+        status = 1;
+    return status;
 }
 
 #ifdef __riscv

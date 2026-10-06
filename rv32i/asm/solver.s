@@ -10,6 +10,14 @@
 # 輸入：修改下方 input 的 14 個字元（組譯時寫入）。
 # 輸出：解答（例如 "B' R' D2"）與換行；結束碼 0 成功、1 搜尋或驗證失敗、2 輸入不合法。
 #
+# 測試模式（RUN_TESTS = 1，預設）：先依序執行 tests 表中的測試案例，在程式內比對
+#   預期的最短步數（或預期被拒絕），每個案例印一行 PASS／FAIL，然後照常處理 input。
+#   任何測試失敗時，結束碼為 1。
+# 一般模式（RUN_TESTS = 0）：只處理 input。量測 --iret（例如回報 21345671111111 的指令數）
+#   時使用這個模式，數字才只包含一次查詢。兩種模式只差開頭的一次判斷。
+# Ripes 不支援 .if，所以模式是在執行時用 RUN_TESTS 判斷，而不是條件組譯。
+    .equ RUN_TESTS, 1
+#
 # 只用 RV32I：沒有 mul/div/rem；乘以小常數用加法或 shift/add。
 # 這個 Ripes 版本不支援 .if，所以沒有條件組譯；LED renderer 尚未實作。
 #
@@ -25,6 +33,31 @@
 
     .data
 input:  .string "21345671111111"        # PPPPPPPOOOOOOO
+
+# 內建測試案例：每筆 16 bytes = 狀態（.string，15 bytes 含 NUL）+ 預期結果（1 byte）
+#   預期結果 0~11：預期的最短步數；255：預期被拒絕（輸入不合法）
+#   預期步數來自 host 的完整 BFS 距離表（c_reference/H1-H4 的標準答案）
+#   以第一個 byte 為 0 的一筆作為結尾
+tests:  .string "12345671111111"        # 已還原
+        .byte   0
+        .string "24173562322133"        # 短打亂：R B' D2，真實距離 3
+        .byte   3
+        .string "21345671111111"        # 距離 11（tests/solutions.txt 的樣本）
+        .byte   11
+        .string "11345671111111"        # 不合法：角塊 1 重複
+        .byte   255
+        .byte   0                       # 結尾
+msg_test:   .string "test "
+msg_colon:  .string ": "
+msg_pass:   .string " PASS "
+msg_fail:   .string " FAIL "
+msg_moves:  .string " moves: "
+msg_reject: .string "rejected"
+msg_nl:     .byte 10, 0
+    .align 4
+test_ptr:   .word 0                     # 目前的測試案例（search 會用掉所有暫存器，所以放在記憶體）
+test_num:   .word 0                     # 目前的編號（1 起算）
+test_fail:  .word 0                     # 失敗的個數
     .align 2
 root_p: .half 0
 root_o: .half 0
@@ -53,20 +86,39 @@ newline: .byte 10, 0
     .text
 # ---------------------------------------------------------------- main
 main:
+    li   t0, RUN_TESTS
+    bnez t0, main_tests
+    # 一般模式：只處理 input。不經過 solve、不檢查 test_fail，
+    # 讓量測 --iret 時只多開頭這兩條判斷（gcc 編譯 C 參考版時，RUN_TESTS = 0 是編譯時常數）
+    la   a0, input
     jal  ra, parse              # a0 = 0 成功；a1 = p，a2 = o
     bnez a0, exit_invalid
-    la   t0, root_p				
-    sh   a1, 0(t0)				# a1 is encoded p
+    la   t0, root_p
+    sh   a1, 0(t0)
     la   t0, root_o
-    sh   a2, 0(t0)				# a2 is encoded o
+    sh   a2, 0(t0)
     jal  ra, search             # a0 = 解答長度，失敗為 -1
-    bltz a0, exit_fail			 
-    mv   s0, a0					# a0 is the total distance from solved state
+    bltz a0, exit_fail
+    mv   s0, a0
     jal  ra, verify             # a0 = 0 表示套用解答後回到還原狀態
-    bnez a0, exit_fail			# a0 != 0 means the path is not correct
-    mv   a0, s0					# a0 is distance
+    bnez a0, exit_fail
+    mv   a0, s0
     jal  ra, print_solution
     li   a0, 0
+    j    exit
+main_tests:                     # 測試模式：先跑內建測試，失敗個數記在 test_fail
+    jal  ra, run_tests
+    la   a0, input              # 再照常處理 input
+    jal  ra, solve              # a0 = 0 成功（a1 = 步數）、1 失敗、2 不合法
+    bnez a0, main_tests_exit
+    mv   a0, a1
+    jal  ra, print_solution
+    li   a0, 0
+main_tests_exit:                # a0 = input 的結束碼；任何測試失敗時改為 1
+    la   t0, test_fail
+    lw   t0, 0(t0)
+    beqz t0, exit
+    li   a0, 1
     j    exit
 exit_invalid:
     li   a0, 2
@@ -77,13 +129,141 @@ exit:
     li   a7, 93                 # Ripes ecall：以 a0 為結束碼結束
     ecall
 
+# ---------------------------------------------------------------- solve
+# 求解一個狀態：輸入 a0 = 14 字元字串的位址。
+# 輸出 a0 = 0 成功（a1 = 解答步數，moves 已填好且已驗證回到還原狀態）、
+#      a0 = 1 搜尋或驗證失敗、a0 = 2 輸入不合法。
+# search 會改動幾乎所有暫存器；verify 保留 s0，所以步數放在 s0。
+solve:
+    addi sp, sp, -4
+    sw   ra, 0(sp)
+    jal  ra, parse              # a0 = 0 成功；a1 = p，a2 = o
+    bnez a0, solve_invalid
+    la   t0, root_p
+    sh   a1, 0(t0)
+    la   t0, root_o
+    sh   a2, 0(t0)
+    jal  ra, search             # a0 = 解答長度，失敗為 -1
+    bltz a0, solve_fail
+    mv   s0, a0
+    jal  ra, verify             # a0 = 0 表示套用解答後回到還原狀態（T5）
+    bnez a0, solve_fail
+    li   a0, 0
+    mv   a1, s0
+    j    solve_return
+solve_invalid:
+    li   a0, 2
+    j    solve_return
+solve_fail:
+    li   a0, 1
+solve_return:
+    lw   ra, 0(sp)
+    addi sp, sp, 4
+    ret
+
+# ---------------------------------------------------------------- run_tests
+# 依序執行 tests 表中的每個案例，在程式內比對預期結果，每個案例印一行：
+#   test N: STATE PASS M moves: 解答        （預期步數 M，且 solve 成功、步數相同）
+#   test N: STATE PASS rejected             （預期被拒絕，solve 回傳 2）
+#   失敗時把 PASS 換成 FAIL，並把 test_fail 加 1。
+# solve 會改動幾乎所有暫存器，所以目前的案例與編號都存在記憶體（test_ptr、test_num）。
+run_tests:
+    addi sp, sp, -4             # 
+    sw   ra, 0(sp)
+    la   t0, tests
+    la   t1, test_ptr
+    sw   t0, 0(t1)
+    la   t1, test_num
+    sw   zero, 0(t1)
+    la   t1, test_fail
+    sw   zero, 0(t1)
+run_tests_loop:
+    la   t1, test_ptr
+    lw   t0, 0(t1)
+    lbu  t2, 0(t0)
+    beqz t2, run_tests_done     # 第一個 byte 為 0：沒有更多案例
+    la   t1, test_num
+    lw   t2, 0(t1)
+    addi t2, t2, 1
+    sw   t2, 0(t1)
+    la   a0, msg_test           # "test N: STATE"
+    li   a7, 4
+    ecall
+    mv   a0, t2
+    li   a7, 1                  # Ripes ecall：印出整數
+    ecall
+    la   a0, msg_colon
+    li   a7, 4
+    ecall
+    la   t1, test_ptr
+    lw   a0, 0(t1)
+    li   a7, 4
+    ecall
+    la   t1, test_ptr
+    lw   a0, 0(t1)
+    jal  ra, solve              # a0 = 狀態碼，a1 = 步數
+    la   t1, test_ptr
+    lw   t0, 0(t1)
+    lbu  t2, 15(t0)             # 預期結果
+    li   t3, 255
+    beq  t2, t3, run_tests_expect_reject
+    bnez a0, run_tests_fail     # 預期有解：solve 必須成功
+    bne  a1, t2, run_tests_fail # 而且步數必須等於預期的最短步數
+    mv   s0, a1                 # 通過：印出 " PASS M moves: 解答"
+    la   a0, msg_pass
+    li   a7, 4
+    ecall
+    mv   a0, s0
+    li   a7, 1
+    ecall
+    la   a0, msg_moves
+    li   a7, 4
+    ecall
+    mv   a0, s0
+    jal  ra, print_solution     # 印出解答與換行
+    j    run_tests_next
+run_tests_expect_reject:
+    li   t3, 2
+    bne  a0, t3, run_tests_fail # 預期被拒絕：solve 必須回傳 2
+    la   a0, msg_pass
+    li   a7, 4
+    ecall
+    la   a0, msg_reject
+    li   a7, 4
+    ecall
+    la   a0, msg_nl
+    li   a7, 4
+    ecall
+    j    run_tests_next
+run_tests_fail:
+    la   t1, test_fail
+    lw   t2, 0(t1)
+    addi t2, t2, 1
+    sw   t2, 0(t1)
+    la   a0, msg_fail
+    li   a7, 4
+    ecall
+    la   a0, msg_nl
+    li   a7, 4
+    ecall
+run_tests_next:
+    la   t1, test_ptr
+    lw   t0, 0(t1)
+    addi t0, t0, 16             # 下一筆案例
+    sw   t0, 0(t1)
+    j    run_tests_loop
+run_tests_done:
+    lw   ra, 0(sp)
+    addi sp, sp, 4
+    ret
+
 # ---------------------------------------------------------------- parse
-# 解析 input，檢查合法性，算出排列索引 p 與方向索引 o。
+# 解析 a0 指向的 14 字元字串，檢查合法性，算出排列索引 p 與方向索引 o。
 # 回傳 a0 = 0 成功（a1 = p、a2 = o），a0 = 1 不合法。
 # 檢查的順序與內容不變；為了讓已還原、短打亂的輸入也比 gcc 快，改寫成：
 #   指標遞增、常數放在迴圈外、mod 3 用位元遮罩、乘法展開成 shift/add。
 parse:
-    la   t0, input              # t0：目前的排列字元（方向字元在 7(t0)）
+    mv   t0, a0                 # t0：目前的排列字元（方向字元在 7(t0)）
     la   t1, pos                # t1：目前的 pos[i]（oris[i] 在 8(t1)，oris 緊接在 pos 後面）
     addi t3, t0, 7              # 迴圈結束的位置
     li   t4, 0                  # seen：第 c 個 bit 為 1 表示角塊 c 出現過
