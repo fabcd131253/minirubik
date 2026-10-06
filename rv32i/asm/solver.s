@@ -31,9 +31,8 @@ root_o: .half 0
 pos:    .zero 8                         # 解析後的排列 pos[0..6]
 oris:   .zero 8                         # 解析後的方向 oris[0..6]
 moves:  .zero 16                        # 解答，每步一個 byte（0..8）
-frames: .zero 104                       # 搜尋堆疊：哨兵 + 12 層，每層 8 bytes
-                                        #   +0 tp  +2 to（.half）  +4 face  +5 turn（.byte）
-                                        #   frame[-1] 是哨兵：根節點的 p、o，face = 3
+frames: .zero 96                        # 搜尋堆疊：12 層，每層 8 bytes，只存這一層自己的值
+                                        #   +0 p  +2 o（.half）  +4 face  +5 turn  +6 last_face（.byte）
     .align 2
 face_tables:                            # face_tables[face]：該面的 perm_qt、ori_qt 位址
         .word perm_qt_R, ori_qt_R
@@ -96,60 +95,60 @@ parse_loop:
     lbu  a1, 0(t0)              # 排列字元
     addi a1, a1, -49            # '1' -> 0；比 '1' 小的字元（含 NUL）會變成很大的無號數
     bgeu a1, t6, parse_bad
-    sll  a2, a4, a1             # 角塊 c 對應的 bit . a4 = 1
-    and  a5, t4, a2				# t4 = seen positions (0001000 means cube 3 was seen)
+    sll  a2, a4, a1             # 角塊 c 對應的 bit
+    and  a5, t4, a2
     bnez a5, parse_bad          # 角塊重複
-    or   t4, t4, a2				# set 1 at that position
-    sb   a1, 0(t1)              # store it to pos[i]
+    or   t4, t4, a2
+    sb   a1, 0(t1)              # pos[i] = c
     lbu  a1, 7(t0)              # 方向字元
     addi a1, a1, -49
-    bgeu a1, a3, parse_bad		# >= 3
-    add  t5, t5, a1				# t5 is sum of orientations
-    sb   a1, 8(t1)              # store it to oris[i]
-    addi t0, t0, 1				# input++
-    addi t1, t1, 1				# pos++
-    bne  t0, t3, parse_loop		# branch if input[i] != input[7]
+    bgeu a1, a3, parse_bad
+    add  t5, t5, a1
+    sb   a1, 8(t1)              # oris[i] = d
+    addi t0, t0, 1
+    addi t1, t1, 1
+    bne  t0, t3, parse_loop
     lbu  a1, 7(t0)              # input[14] 必須是 NUL：長度剛好 14
     bnez a1, parse_bad
-    li   a2, 0x1249             # 0x1249 = 0001 0010 0100 1001
-    srl  a2, a2, t5				# LSB will be 1 if it is the multiple of 3
-    andi a2, a2, 1				
+    li   a2, 0x1249             # 第 0、3、6、9、12 個 bit：總和（最多 14）是 3 的倍數
+    srl  a2, a2, t5
+    andi a2, a2, 1
     beqz a2, parse_bad          # 方向總和必須是 3 的倍數
 
     # 排列索引：先把每一位的 smaller（後面比 pos[i] 小的個數）寫回 pos[i]，
     # i 由小到大，之後只會讀到 pos[j]（j > i），所以覆寫是安全的。i = 6 的 smaller 一定是 0。
-    addi t1, t1, -7             # t1 = &pos[0] (was pos[7])
-    addi t3, t1, 6              # 只算 i = 0..5 . t3 = pos[6]
-    addi t6, t1, 7              # 內層迴圈的結束位置 &pos[7] . t6 = pos[7]
+    addi t1, t1, -7             # t1 = &pos[0]
+    addi t3, t1, 6              # 只算 i = 0..5
+    addi t6, t1, 7              # 內層迴圈的結束位置 &pos[7]
 parse_rank:
     lbu  a2, 0(t1)              # pos[i]
     li   a3, 0                  # smaller
-    addi a4, t1, 1              # j = &pos[i] + 1
+    addi a4, t1, 1              # j = i + 1
 parse_count:
-    lbu  a5, 0(a4)				# a5 = pos[i + 1]
+    lbu  a5, 0(a4)
     sltu a5, a5, a2             # pos[j] < pos[i]：1，否則 0
-    add  a3, a3, a5				# a3 = smaller
-    addi a4, a4, 1				# j++
-    bne  a4, t6, parse_count	# a4 = j, t6 = 7
+    add  a3, a3, a5
+    addi a4, a4, 1
+    bne  a4, t6, parse_count
     sb   a3, 0(t1)              # pos[i] = smaller
-    addi t1, t1, 1				# i++
+    addi t1, t1, 1
     bne  t1, t3, parse_rank
     # p = ((((c0 × 6 + c1) × 5 + c2) × 4 + c3) × 3 + c4) × 2 + c5，乘法展開成 shift/add
     addi t1, t1, -6             # t1 = &pos[0]
     lbu  a1, 0(t1)              # p = c0
-    slli a2, a1, 2				# x 4
-    slli a1, a1, 1				# x 2
-    add  a1, a1, a2             # × 6 = x4 + x2
+    slli a2, a1, 2
+    slli a1, a1, 1
+    add  a1, a1, a2             # × 6
     lbu  a2, 1(t1)
     add  a1, a1, a2             # + c1
-    slli a2, a1, 2				# x 4
+    slli a2, a1, 2
     add  a1, a1, a2             # × 5
     lbu  a2, 2(t1)
     add  a1, a1, a2             # + c2
     slli a1, a1, 2              # × 4
     lbu  a2, 3(t1)
     add  a1, a1, a2             # + c3
-    slli a2, a1, 1				# x 2
+    slli a2, a1, 1
     add  a1, a1, a2             # × 3
     lbu  a2, 4(t1)
     add  a1, a1, a2             # + c4
@@ -158,15 +157,15 @@ parse_count:
     add  a1, a1, a2             # + c5
 
     # 方向索引：前 6 個方向當作三進位數，o = o × 3 + oris[i]
-    li   a2, 0					
+    li   a2, 0
     addi t1, t1, 8              # t1 = &oris[0]
-    addi t3, t1, 6				# t3 = &oris[6]
+    addi t3, t1, 6
 parse_ori:
-    lbu  a5, 0(t1)				# a5 = oris[i]
-    slli a3, a2, 1				# a3 = 2 * a2
-    add  a2, a3, a2             # o × 3	. 2 * a2 + a2
-    add  a2, a2, a5				# a2 = 3 * a2 + oris[i]
-    addi t1, t1, 1				# i++
+    lbu  a5, 0(t1)
+    slli a3, a2, 1
+    add  a2, a3, a2             # o × 3
+    add  a2, a2, a5
+    addi t1, t1, 1
     bne  t1, t3, parse_ori
     li   a0, 0
     ret
@@ -290,18 +289,14 @@ search_setup:                   # 搜尋迴圈中固定不變的值
     li   a1, PERIMETER_K
     addi a2, a1, 1              # 不在 perimeter 內時的 h = K + 1
     la   ra, face_tables        # 各面兩張轉移表的位址
-    la   t0, frames             # 哨兵 frame：根節點的 p、o 與「上一步的面」= 3
-    sh   s5, 0(t0)
-    sh   s6, 2(t0)
-    li   t1, 3
-    sb   t1, 4(t0)
 
 search_iteration:               # 每一輪：從根節點重新開始
     li   s2, 255                # 這一輪被剪掉的節點中，最小的超出量 f - bound
     addi s1, a3, -1             # limit = bound - g，根節點的子節點 g = 1
     li   s0, 0
-    la   s3, frames
-    addi s3, s3, 8              # frame[0]（frame[-1] 是哨兵）
+    la   s3, frames             # frame[0]
+                                # s5、s6 是根節點的 p、o：第一輪在進入前載入；
+                                # 之後每一輪結束時都已回到根節點，s5、s6 仍是根節點
     li   s9, 3                  # 根節點沒有上一步的面
     li   s7, -1
     li   s8, 3                  # turn = 3：先換到第一個面
@@ -368,10 +363,11 @@ search_plain:                   # h 不是精確值
     addi t1, t1, -1             # move = face * 3 + turn - 1
     add  t3, s4, s0
     sb   t1, 0(t3)              # moves[d] = move
-    sh   s10, 0(s3)             # 保存這一層：tp、to、face、turn
-    sh   s11, 2(s3)             #（p、o 就是上一層的 tp、to，上一步的面就是上一層的 face）
+    sh   s5, 0(s3)              # 保存這一層自己的值：p、o、face、turn、last_face
+    sh   s6, 2(s3)              #（tp、to 不必存：回溯時就是子節點的 p、o，仍在 s5、s6）
     sb   s7, 4(s3)
     sb   s8, 5(s3)
+    sb   s9, 6(s3)
     addi s3, s3, 8
     addi s0, s0, 1				# d++
     addi s1, s1, -1             # 下一層的 g 多 1：limit 少 1
@@ -393,13 +389,13 @@ search_pop:
     addi s3, s3, -8             # 回到上一層，接著試它的下一個 move
     addi s0, s0, -1				# d--
     addi s1, s1, 1              # 上一層的 g 少 1：limit 多 1
-    lhu  s10, 0(s3)
-    lhu  s11, 2(s3)
+    mv   s10, s5                # 這一層的 tp、to = 剛離開的子節點的 p、o
+    mv   s11, s6                #（必須在下面載入 s5、s6 之前）
+    lhu  s5, 0(s3)              # 這一層自己的 p、o、face、turn、last_face
+    lhu  s6, 2(s3)
     lbu  s7, 4(s3)
     lbu  s8, 5(s3)
-    lhu  s5, -8(s3)             # 這一層的 p、o 與上一步的面，存在上一層的 frame
-    lhu  s6, -6(s3)
-    lbu  s9, -4(s3)
+    lbu  s9, 6(s3)
     slli t0, s7, 3
     add  t0, ra, t0
     lw   a6, 0(t0)
