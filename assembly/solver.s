@@ -3,12 +3,12 @@
 # 演算法：IDA*，heuristic = max(h_perm[p], h_ori[o])，h <= PERIMETER_K 時查 perimeter：
 #   查到 -> 精確距離（exact）；查不到 -> PERIMETER_K + 1
 # 搜尋到 exact 且 g + d <= bound 的狀態就停止，沿 perimeter 補完剩下的步數。
-# PERIMETER_K = 0（tables_ida.s）時只有還原狀態會查表，等於只用 PDB 的 IDA*。
+# PERIMETER_K = 0（ida/tables_ida.s）時只有還原狀態會查表，等於只用 PDB 的 IDA*。
 #
 # 組譯：Ripes 一次只讀一個檔案，而且 .equ 要先定義才能使用，所以先接表格，再接本檔，
 # 最後接 renderer（Ripes 不支援 .if，所以 renderer 的開關是換檔案）：
 #   cat tables.s solver.s render_cli.s > solver_full.s     CLI 版，量測 --iret
-#   cat tables.s solver.s render_gui.s > solver_gui.s      GUI 版，LED matrix 動畫
+#   cat tables.s solver.s render_gui.s > solver_full_gui.s GUI 版，LED matrix 動畫
 # 兩個版本只差在 renderer：CLI 版的 render_input 只有一條 ret。
 # 輸入：修改下方 input 的 14 個字元（組譯時寫入）。
 # 輸出：解答（例如 "B' R' D2"）與換行；結束碼 0 成功、1 搜尋或驗證失敗、2 輸入不合法。
@@ -40,7 +40,7 @@ input:  .string "21345671111111"        # PPPPPPPOOOOOOO
 
 # 內建測試案例：每筆 16 bytes = 狀態（.string，15 bytes 含 NUL）+ 預期結果（1 byte）
 #   預期結果 0~11：預期的最短步數；255：預期被拒絕（輸入不合法）
-#   預期步數來自 host 的完整 BFS 距離表（c_reference/H1-H4 的標準答案）
+#   預期步數來自 host 的完整 BFS 距離表（c/H1-H4 的標準答案）
 #   以第一個 byte 為 0 的一筆作為結尾
 tests:  .string "12345671111111"        # 已還原
         .byte   0

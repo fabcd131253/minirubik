@@ -3,3 +3,11 @@
 *.swp
 solver
 mini
+build/
+host/gen_tables
+c/solver_ref
+c/ida/solver_ref_ida
+c/solver_ref.elf
+c/ida/solver_ref_ida.elf
+c/H1-H4/h_gates
+c/H1-H4/h_gates_ida

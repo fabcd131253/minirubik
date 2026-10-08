@@ -1,4 +1,4 @@
-/* h_gates.c：對 c_reference/solver_ref.c 執行作業的 host 端關卡 H1–H4
+/* h_gates.c：對 c/solver_ref.c 執行作業的 host 端關卡 H1–H4
  *
  * 直接 #include "solver_ref.c"，呼叫它自己的 heuristic()、lookup()、search()、verify()，
  * 檢查的就是 solver_ref.c 本身，而不是另一份照同樣邏輯寫的程式。
@@ -14,8 +14,8 @@
  *       以及每個狀態，lookup() 的結果都和未壓縮的距離表相同
  *
  * 編譯（-I 指向 solver_ref.c 與 tables.h 所在的資料夾）：
- *   cc -O2 -std=c99 -I<c_reference> h_gates.c -o h_gates               使用 tables.h
- *   cc -O2 -std=c99 -I<c_reference> -DTABLES_IDA h_gates.c -o h_gates  使用 tables_ida.h
+ *   cc -O2 -std=c99 -Ic h_gates.c -o h_gates               使用 tables.h
+ *   cc -O2 -std=c99 -Ic -DTABLES_IDA h_gates.c -o h_gates  使用 ida/tables_ida.h（在最上層執行 make gates 即可）
  * 狀態碼：0 全部通過，1 有關卡失敗
  */
 #define main solver_ref_main /* 把 solver_ref.c 的 main 改名，避免衝突 */

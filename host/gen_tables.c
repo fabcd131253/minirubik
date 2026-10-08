@@ -1,5 +1,5 @@
 /* gen_tables.c：host 端表格產生器，輸出 RV32I 組語的資料檔（tables.s），
- * 並可同時輸出內容相同的 C 標頭檔（tables.h），給 c_reference/solver_ref.c 使用
+ * 並可同時輸出內容相同的 C 標頭檔（tables.h），給 c/solver_ref.c 使用
  *
  * 輸出的表格（標籤名稱 / 每格大小 / 格數）：
  *   perm_qt_R, perm_qt_B, perm_qt_D   2 bytes  5,040   排列索引 p 轉一次 quarter turn 後的 p'
@@ -33,10 +33,7 @@
  * 對齊：同一個 Ripes 版本實測 .align 2 是對齊 2 bytes（不是 GNU 的 2^2 = 4），
  * .half 只需要 2 bytes 對齊，所以足夠。總大小也依 2 bytes 對齊計算。
  */
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-function" /* cube_common.h 中搜尋用的函式這裡用不到 */
 #include "cube_common.h"
-#pragma GCC diagnostic pop
 
 #define MAX_K 5
 #define MAX_PERIMETER 12224 /* 半徑 5 的狀態數 */
@@ -44,7 +41,7 @@
 #define D_SHIFT 10
 #define VALUES_PER_LINE 16
 
-/* ---- perimeter（與 3_explanation/algorithms/bida_bucket.c 相同的分桶格式） ---- */
+/* ---- perimeter：以排列 p 分桶，桶內依朝向 o 遞增排序 ---- */
 
 static int K;
 static uint16_t bucket_start[PERMUTATIONS + 1];
@@ -273,7 +270,7 @@ static int verify_file(const char *path, const Table *tables, int ntables)
     return ok;
 }
 
-/* C 標頭檔：和 .s 檔相同的表格、名稱與順序，給 c_reference/solver_ref.c 使用 */
+/* C 標頭檔：和 .s 檔相同的表格、名稱與順序，給 c/solver_ref.c 使用 */
 static int write_c_header(const char *path, const Table *tables, int ntables)
 {
     FILE *f = fopen(path, "w");

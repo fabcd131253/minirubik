@@ -29,7 +29,7 @@ print_solution:
 	addi	a4,a4,1
 	mv	a0,a1
  #APP
-# 86 "c_reference/solver_ref.c" 1
+# 86 "c/solver_ref.c" 1
 	ecall
 # 0 "" 2
  #NO_APP
@@ -39,7 +39,7 @@ print_solution:
 	slli	a0,a0,2
 	add	a0,a3,a0
  #APP
-# 86 "c_reference/solver_ref.c" 1
+# 86 "c/solver_ref.c" 1
 	ecall
 # 0 "" 2
  #NO_APP
@@ -50,7 +50,7 @@ print_solution:
 	addi	a0,a0,%lo(.LC1)
 	li	a7,4
  #APP
-# 86 "c_reference/solver_ref.c" 1
+# 86 "c/solver_ref.c" 1
 	ecall
 # 0 "" 2
  #NO_APP
@@ -834,7 +834,7 @@ _start:
 	mv	a0,s3
 	li	a7,4
  #APP
-# 86 "c_reference/solver_ref.c" 1
+# 86 "c/solver_ref.c" 1
 	ecall
 # 0 "" 2
  #NO_APP
@@ -842,20 +842,20 @@ _start:
 	mv	a0,s11
 	li	a7,1
  #APP
-# 94 "c_reference/solver_ref.c" 1
+# 94 "c/solver_ref.c" 1
 	ecall
 # 0 "" 2
  #NO_APP
 	li	a7,4
 	mv	a0,s2
  #APP
-# 86 "c_reference/solver_ref.c" 1
+# 86 "c/solver_ref.c" 1
 	ecall
 # 0 "" 2
  #NO_APP
 	mv	a0,s0
  #APP
-# 86 "c_reference/solver_ref.c" 1
+# 86 "c/solver_ref.c" 1
 	ecall
 # 0 "" 2
  #NO_APP
@@ -874,13 +874,13 @@ _start:
 	addi	a5,a5,1
 	sw	a5,%lo(test_fail)(s10)
  #APP
-# 86 "c_reference/solver_ref.c" 1
+# 86 "c/solver_ref.c" 1
 	ecall
 # 0 "" 2
  #NO_APP
 	addi	a0,s7,%lo(.LC1)
  #APP
-# 86 "c_reference/solver_ref.c" 1
+# 86 "c/solver_ref.c" 1
 	ecall
 # 0 "" 2
  #NO_APP
@@ -902,7 +902,7 @@ _start:
 	mv	a0,s0
 	li	a7,93
  #APP
-# 101 "c_reference/solver_ref.c" 1
+# 101 "c/solver_ref.c" 1
 	ecall
 # 0 "" 2
  #NO_APP
@@ -913,19 +913,19 @@ _start:
 	bne	a3,a5,.L152
 	addi	a0,s8,%lo(.LC4)
  #APP
-# 86 "c_reference/solver_ref.c" 1
+# 86 "c/solver_ref.c" 1
 	ecall
 # 0 "" 2
  #NO_APP
 	addi	a0,s9,%lo(.LC5)
  #APP
-# 86 "c_reference/solver_ref.c" 1
+# 86 "c/solver_ref.c" 1
 	ecall
 # 0 "" 2
  #NO_APP
 	addi	a0,s7,%lo(.LC1)
  #APP
-# 86 "c_reference/solver_ref.c" 1
+# 86 "c/solver_ref.c" 1
 	ecall
 # 0 "" 2
  #NO_APP
@@ -938,14 +938,14 @@ _start:
 	addi	a0,s8,%lo(.LC4)
 	li	a7,4
  #APP
-# 86 "c_reference/solver_ref.c" 1
+# 86 "c/solver_ref.c" 1
 	ecall
 # 0 "" 2
  #NO_APP
 	li	a7,1
 	lw	a0,12(sp)
  #APP
-# 94 "c_reference/solver_ref.c" 1
+# 94 "c/solver_ref.c" 1
 	ecall
 # 0 "" 2
  #NO_APP
@@ -953,7 +953,7 @@ _start:
 	li	a7,4
 	addi	a0,a5,%lo(.LC6)
  #APP
-# 86 "c_reference/solver_ref.c" 1
+# 86 "c/solver_ref.c" 1
 	ecall
 # 0 "" 2
  #NO_APP

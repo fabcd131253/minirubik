@@ -1,8 +1,0 @@
-# 編譯產生的執行檔（用 make 重新產生）
-host/gen_tables
-c_reference/solver_ref
-c_reference/solver_ref_ida
-c_reference/solver_ref.elf
-c_reference/solver_ref_ida.elf
-c_reference/H1-H4/h_gates
-c_reference/H1-H4/h_gates_ida

@@ -1,4 +1,4 @@
-/* solver_ref.c：asm/solver.s 的 C 參考版
+/* solver_ref.c：assembly/solver.s 的 C 參考版
  *
  * 和 solver.s 做完全相同的事：相同的資料、相同的函式切分、相同的搜尋順序，
  * 所以對同一個輸入會印出相同的解答、回傳相同的結束碼。
@@ -20,10 +20,10 @@
  *
  * 編譯：
  *   host：cc -O2 -std=c99 solver_ref.c -o solver_ref
- *         -DTABLES_IDA          使用 tables_ida.h（只用 PDB 的 IDA*）
+ *         -DTABLES_IDA          使用 ida/tables_ida.h（只用 PDB 的 IDA*）
  *         -DINPUT='"…"'        改變輸入（預設與 solver.s 相同）
  *         -DRUN_TESTS=0         一般模式：只處理 input（預設 1：先跑內建測試）
- *   RV32I：見 1_submission/Makefile 的 rv32、elf 目標
+ *   RV32I：見最上層 Makefile 的 rv32、elf、run-ref 目標
  * 輸出：解答與換行；結束碼 0 成功、1 搜尋或驗證失敗、2 輸入不合法（與 solver.s 相同）
  * 測試模式：先依序執行 tests 表中的案例，每個案例印一行 PASS／FAIL（格式與 solver.s 相同），
  *   任何測試失敗時結束碼為 1。
@@ -31,7 +31,7 @@
 #include <stdint.h>
 
 #ifdef TABLES_IDA
-#include "tables_ida.h"
+#include "ida/tables_ida.h"
 #else
 #include "tables.h"
 #endif

@@ -1,7 +1,7 @@
 # render_gui.s：LED matrix renderer（GUI 版）
 #
 # 把方塊畫成展開圖，接在 solver.s 後面組譯：
-#   cat tables.s solver.s render_gui.s > solver_gui.s
+#   cat tables.s solver.s render_gui.s > solver_full_gui.s
 # 需要在 Ripes 的 I/O 分頁加入 LED Matrix（寬 35、高 25），組譯器才會有 LED_MATRIX_0_* 符號。
 # CLI 版改接 render_cli.s（只有一個空的 render_input）；兩個版本只差在這個檔案。
 #
@@ -18,7 +18,7 @@
 #
 # 顏色：角塊 c 在位置 P、方向 k 時，位置 P 的第 j 張貼紙（j = 0 為 U/D 面，1、2 依外側看順時針）
 #   顯示角塊 c 的第 (j + k) mod 3 種顏色。這條公式與座標表由
-#   2_compat_tests/led_render/render_check.c（3D 貼紙模擬）逐張比對驗證。
+#   一個獨立的 3D 貼紙模擬程式逐張比對驗證。
 #
 # 轉動：與 solver_simple.c 相同的 FROM/SPIN 模型，多一個固定不動的位置 7（UFL）。
 

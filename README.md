@@ -1,226 +1,218 @@
-# minirubik
+# minirubik on RV32I
 
-An optimal C99 solver for the 2×2×2 Rubik’s Cube. It builds a breadth-first
-table for all 3,674,160 states and solves every valid position in at most 11
-half-turn-metric moves.
+An optimal solver for the 2×2×2 Rubik's Cube, written in hand-written RV32I
+assembly for the [Ripes](https://github.com/mortbopet/Ripes) simulator. This
+fork of [sysprog21/minirubik](https://github.com/sysprog21/minirubik) is
+Assignment 1 of Computer Architecture (Fall 2026):
+<https://hackmd.io/@sysprog/2026-arch-homework1>.
 
-## Why a cube is a graph
+## The problem
 
-Ernő Rubik created the original cube in 1974 to demonstrate how parts can move
-independently without breaking the whole. A 3×3 cube has 20 moving pieces and
-about 4.3 × 10¹⁹ reachable arrangements. The smaller 2×2 cube keeps the eight
-corners and removes the edges and fixed centers. [Philo Li’s formula-free
-introduction](https://philoli.com/zh/blog/solve-rubiks-cube-without-formulas/)
-offers the key intuition: every turn is reversible, turns can be composed, and
-their order matters—`R U` is generally not `U R`.
+The upstream C program, [`solver.c`](solver.c), runs a breadth-first search
+over all 3,674,160 states of the cube, stores one move toward solved for every
+state, and then follows that table. On a hosted machine this takes 0.065 s. On
+the target it does not fit:
 
-Human solvers use those facts to move a few pieces while restoring the rest;
-the commutator `A B A⁻¹ B⁻¹` is the standard example. This program uses the
-same group structure differently: it treats every valid arrangement as a node,
-every face turn as an edge, and searches the entire graph once. It does not use
-the article’s 3×3 Roux stages or a library of memorized algorithms.
+| Constraint on the target | Upstream `solver.c` |
+| :--- | ---: |
+| Static data at most 128 KiB | 18,405,414 B peak (BFS queue 14.0 MiB, table 3.5 MiB) |
+| At most 5 × 10⁷ retired instructions per distance-11 state | about 10⁹ to build the table |
+| RV32I only: no `mul`, `div`, or `rem` | ranks are built with multiply and divide |
 
-The solver gives the eight corner positions the numbers `0–7`. The 2.5D
-walkthrough below shows where those numbers are on the physical cube.
+This port keeps optimality, a shortest solution for every state, while
+replacing full enumeration with a heuristic search that runs on the simulated
+processor.
 
-## How it works
+## Results
 
-1. Fix one corner to remove whole-cube rotations.
-2. Rank the remaining corner permutation and six independent orientations into
-   a dense integer.
-3. Breadth-first search outward from solved using `R`, `B`, and `D`, including
-   inverse and half turns.
-4. Store one move toward solved for every state; following those moves gives an
-   optimal solution of at most 11 moves.
+Measured on Ripes v2.2.6-106-g5b8a616, `--mode cli --proc RV32_ISS --iret`,
+with `RUN_TESTS = 0` and the CLI renderer. The reference is the C version of
+the same algorithm, [`c/solver_ref.c`](c/solver_ref.c), compiled with
+`gcc -O2 -march=rv32i -mabi=ilp32`.
+
+| | Hand-written assembly | gcc -O2 reference |
+| :--- | ---: | ---: |
+| `21345671111111` (distance 11) | **849,005** | 1,134,043 |
+| Worst distance-11 state, `54721631111111` | **2,342,150** (4.7% of 5 × 10⁷) | 3,125,116 |
+| Solved cube `12345671111111` | 471 | 520 |
+| `.text` | **2,276 B** | 2,740 B |
+| `.data` | 75,264 B (57.4% of 128 KiB) | — |
+
+All 2,644 distance-11 states and 100 random states give the same output on the
+assembly and the C reference, and every solution length equals the exact
+distance.
+
+## Encoding
+
+One corner, up-front-left, is held fixed, so only the faces `R`, `B`, and `D`
+turn. The other seven corners give a state of two independent indices:
+
+| Part | Range | Meaning |
+| :--- | :--- | :--- |
+| permutation `p` | 0 … 5,039 (7!) | which corner sits in each position, as a Lehmer-code rank |
+| orientation `o` | 0 … 728 (3⁶) | twists of the first six corners in base 3; the seventh follows because the twist sum is 0 mod 3 |
+
+A quarter turn changes `p` and `o` independently, so each has its own
+transition table (`perm_qt`, `ori_qt`), and the search never combines them into
+`p × 729 + o`. The search loop therefore has no multiply or divide; the only
+multiplications, while parsing the input, are shift-and-add sequences.
+
+The input is the same 14-character string as upstream: seven corner digits
+`1`–`7` for positions 1–7, followed by seven orientation digits `1`–`3`. The
+solved cube is `12345671111111`. See the upstream [`report.md`](report.md) for
+the position map.
+
+## Algorithm
+
+Iterative-deepening A\* (IDA\*) with a perimeter, a simplified form of
+Manzini's BIDA\*, run with a non-recursive frame stack:
+
+- **Pattern databases.** `h_perm[p]` and `h_ori[o]` are the exact distances of
+  the permutation alone and of the orientation alone. Any sequence that solves
+  the cube also solves each projection, so both are lower bounds, and so is
+  their maximum.
+- **Perimeter table.** Every state within 5 moves of solved (12,224 states) is
+  stored with its exact distance. A state inside the perimeter ends the
+  search with its exact remaining distance; a state outside it is at least 6
+  moves away, so the heuristic is `max(h_perm, h_ori, 6)`. The table is looked
+  up only when both pattern databases are at most 5. We use only membership in
+  the perimeter, not BIDA\*'s per-node minimum over perimeter states.
+- **Bucket layout.** The perimeter is stored like a compressed sparse row
+  matrix: `bucket_start[p]` points to the orientations of permutation `p`,
+  sorted by `o`, each packed with its distance into 16 bits. A lookup indexes
+  by `p` directly and reads 2.84 entries on average, against a binary search of
+  about 14 steps over a sorted list that would also need `p × 729 + o`.
+- **Pruning.** A face is never turned twice in a row, so after the first move
+  only 6 of the 9 moves are tried. `X2` and `X'` are obtained by applying the
+  quarter-turn table again, so no half-turn tables are needed.
+
+The search terminates because each iteration raises the bound by at least one
+and the bound cannot pass the true distance, which is at most 11. The first
+solution found is optimal because every smaller bound has already failed.
+
+For comparison, the same program with the pattern databases only
+(`assembly/ida/`, perimeter radius 0) takes 6,336,661 instructions on
+`21345671111111`: the perimeter costs 34,530 bytes and saves a factor of 7.5.
+
+## Memory
+
+All tables are generated on the host by [`host/gen_tables.c`](host/gen_tables.c)
+and linked as data. Ripes rejects `.rodata`, so they live in `.data`.
+
+| Table | Bytes |
+| :--- | ---: |
+| `perm_qt` (3 × 5,040 × 2) | 30,240 |
+| `ori_qt` (3 × 729 × 2) | 4,374 |
+| `bucket_start` (5,041 × 2) | 10,082 |
+| `bucket_entry` (12,224 × 2) | 24,448 |
+| `h_perm` | 5,040 |
+| `h_ori` | 729 |
+| Tables | 74,913 |
+| Program data (input, test cases, messages, 96-byte frame stack) | 351 |
+| `.data` total | 75,264 |
+
+There is no heap and no `.bss`; the stack holds at most two return addresses.
+
+## Correctness
+
+- **On the host** (`make gates`): over all 3,674,160 states, the heuristic
+  never overestimates (H1); every table is fully populated (H2); the search
+  returns a solution of exactly the true distance (H3, about one minute); and
+  the perimeter lookup agrees with the table at even and odd indices (H4).
+- **On the target**: `solver.s` carries four test cases — solved, the 3-move
+  scramble `R B' D2`, the distance-11 state `21345671111111`, and an invalid
+  state — and checks inside the program that each solution returns to solved
+  and has the expected optimal length. It prints `PASS` or `FAIL` per case and
+  exits with status 1 if any case fails. They pass on `RV32_ISS` and `RV32_5S`.
 
 ## Build and run
 
+Requirements: a host C compiler; a RISC-V gcc (`riscv64-unknown-elf-gcc`, or
+xPack `riscv-none-elf-gcc`) for the reference build only; and a Ripes build
+that provides `RV32_ISS` (a continuous prerelease, not v2.2.6).
+
 ```sh
-make
-make check
-make prove   # optional: Frama-C WP proof, needs frama-c and alt-ergo
+make rv32i      # tables, assembly/solver_full*.s, and the host C reference
+make rv32 elf   # c/solver_ref_rv32i.s and the ELF files (needs RISC-V gcc)
+make gates      # H1 to H4 on the host (several minutes)
+```
+
+The `run` targets call the Ripes command line, given by `RIPES` (default
+`Ripes`). The processor is `PROC` (default `RV32_ISS`), and `--iret` is always
+reported. On a machine without a display, run Ripes under `xvfb-run`:
+
+```sh
+make run RIPES="xvfb-run -a /path/to/Ripes.AppImage"
+```
+
+### (a) The gcc -O2 reference, `c/solver_ref_rv32i.s`
+
+```sh
+make run-ref RIPES=/path/to/Ripes
+```
+
+This assembles and links `c/solver_ref_rv32i.s` into `c/solver_ref.elf` and
+runs it on Ripes. To regenerate the assembly from `c/solver_ref.c` first, run
+`make rv32`.
+
+### (b) The hand-written solver, `assembly/solver_full.s`
+
+```sh
+make run RIPES=/path/to/Ripes
+```
+
+By default the program runs its four test cases and then solves the state in
+the `input` line of `assembly/solver.s`:
+
+```
+test 1: 12345671111111 PASS 0 moves:
+test 2: 24173562322133 PASS 3 moves: D2 B R'
+test 3: 21345671111111 PASS 11 moves: R B' D2 R' B R' B' R D2 R B
+test 4: 11345671111111 PASS rejected
+R B' D2 R' B R' B' R D2 R B
+
+Program exited with code: 0
+===== instructions retired
+1700106
+```
+
+The exit code is 0 on success, 1 if the search, the verification, or a test
+case fails, and 2 for an invalid input.
+
+### Choosing the input and the mode
+
+Both targets accept `INPUT`, a 14-character state, and `RUN_TESTS=0`, which
+skips the test cases so that `--iret` counts a single query. The committed
+files are left unchanged; a substituted copy is built under `build/`.
+
+```sh
+make run     INPUT=54721631111111 RUN_TESTS=0   # 2,342,150 instructions
+make run-ref INPUT=54721631111111 RUN_TESTS=0   # 3,125,116 instructions
+make run-ida RUN_TESTS=0                        # pattern databases only
+make run PROC=RV32_5S                           # a pipelined model
+```
+
+To change the input permanently, edit the `input` line in
+`assembly/solver.s` (or `-DINPUT` for `c/solver_ref.c`) and run `make rv32i`.
+
+### LED matrix animation
+
+In the Ripes GUI, add an LED Matrix in the I/O tab with width 35 and height
+25, then load `assembly/solver_full_gui.s`. The cube is drawn as an unfolded
+net, first scrambled and then once after every move of the solution. Ripes has
+no `.if`, so the renderer is chosen by the file appended last; the GUI and CLI
+builds differ only in `render_gui.s` against `render_cli.s`, and the CLI build
+spends two instructions on the empty renderer call.
+
+## Upstream C solver
+
+`solver.c` and `mini.c` are the upstream BFS solvers, unchanged:
+
+```sh
+make            # builds solver and mini
+make check      # test vectors in tests/solutions.txt and invalid inputs
+make prove      # optional Frama-C proof
 ./solver 21345671111111
 ```
 
-`make` builds two binaries. `solver` is the documented one, with contracts, a
-`--self-test` mode, and diagnostics on stderr. `mini` is a golfed variant that
-solves the same input and prints the same line, kept as a readability contrast;
-it has no `--self-test` and prints nothing on failure, and it trades roughly
-eight times the runtime and three times the memory for its brevity.
-
-The 14-digit argument describes the scramble and the printed line is the
-solution. Both formats are explained below.
-
-### Reading the 14-digit input
-
-The program receives one 14-digit code with no spaces. For explanation, split
-it into two groups:
-
-```diagram
-2134567 1111111
-└── P ─┘ └── O ─┘
-  cubies   twists
-```
-
-Imagine seven numbered seats and seven students. A position is a seat fixed in
-space; a cubie is the physical corner that can move to another seat. In the
-solved cube, cubie 1 sits in position 1, cubie 2 in position 2, and so on.
-The real cube has no printed numbers; `0–7` are labels used only by this solver.
-
-#### Step 1: Hold the cube in one direction
-
-Keep `FRONT` facing you and `UP` pointing upward. Position `0` is the corner
-nearest the upper-left of the front face. It is an anchor for describing the
-other corners; the physical cubie is not glued in place.
-
-```diagram
-                              BACK
-                    ·───────────────·
-                   ╱               ╱│
-                  ╱        UP     ╱ │
-                 ╱               ╱  │
-              [0]───────────────·   │
-               │                │   │
-               │     FRONT      │ R │
-               │                │   ·
-               │                │  ╱
-               │                │ ╱
-               │                │╱
-               ·────────────────·
-```
-
-`R` marks the narrow `RIGHT` face.
-
-#### Step 2: Separate the front and back layers
-
-A 2×2×2 cube has only corner cubies. Looking from the fixed direction, four
-corner positions touch the front face and four touch the back face. Each
-bracketed number below names one whole corner, not one colored sticker:
-
-```diagram
- FRONT LAYER                          BACK LAYER
-
- upper-left   upper-right             upper-left   upper-right
-     [0]────────[1]                       [7]────────[4]
-      │          │                         │          │
-      │          │       front ↔ back      │          │
-     [3]────────[2]                       [6]────────[5]
- down-left    down-right               down-left    down-right
-```
-
-The front layer runs clockwise from its upper-left corner as `0, 1, 2, 3`.
-The back layer is drawn as if seen through the cube from the front: `7` is
-upper-left, followed clockwise by `4, 5, 6`.
-
-#### Step 3: Join the two layers into positions 0–7
-
-Slide the back square up and to the right, the same direction the cube recedes
-in Step 1, to get the complete 2.5D position map. The back edges are drawn
-through the front face rather than hidden behind it:
-
-```diagram
-                           BACK
-                      [7]────────[4]
-                     ╱ │        ╱ │
-                  [0]──│─────[1]  │
-                   │   │      │   │
-                   │  [6]─────│──[5]
-                   │ ╱        │ ╱
-                  [3]────────[2]
-                      FRONT
-```
-
-The seven characters of `P` describe positions `1, 2, 3, 4, 5, 6, 7` in that
-order; the anchor at position `0` is left out.
-
-#### Step 4: Put the cubies into those positions
-
-Compare the position map on the left with the filled cube on the right. Read
-`P = 2134567` from left to right to fill the positions. The arrows below the
-figure identify the two positions that change.
-
-```diagram
- POSITION MAP                             AFTER P = 2134567
- (fixed seats)                            (cubies now in seats)
-
-     [7]────────[4]                           [7]────────[4]
-    ╱ │        ╱ │                           ╱ │        ╱ │
- [0]──│─────[1]  │                        [0]──│─────[2]  │
-  │   │      │   │                         │   │      │   │
-  │  [6]─────│──[5]                        │  [6]─────│──[5]
-  │ ╱        │ ╱                           │ ╱        │ ╱
- [3]────────[2]                           [3]────────[1]
-     FRONT                                    FRONT
-
- position:     1 2 3 4 5 6 7
- P says:       2 1 3 4 5 6 7
-               │ │ └───────── cubies 3–7 stay in their matching seats
-               │ └─────────── put cubie 1 in position 2: [2] becomes [1]
-               └───────────── put cubie 2 in position 1: [1] becomes [2]
-```
-
-So the first two digits, `21`, exchange the two corners on the front-right
-edge. The remaining digits, `34567`, leave the other five movable corners
-where they were. `P` must contain every digit from `1` through `7` exactly
-once; otherwise a cubie would be missing or duplicated.
-
-The seven seats named by `P` are:
-
-| Position | Corner of the cube |
-| :---: | :--- |
-| 1 | front, upper, right |
-| 2 | front, down, right |
-| 3 | front, down, left |
-| 4 | back, upper, right |
-| 5 | back, down, right |
-| 6 | back, down, left |
-| 7 | back, upper, left |
-
-The second group, `O = 1111111`, describes the twist of the cubie in each of
-those same seven positions:
-
-| Digit | Meaning |
-| :---: | :--- |
-| 1 | not twisted |
-| 2 | twisted by +120° |
-| 3 | twisted by −120° |
-
-Here every orientation digit is `1`, so the two corners change places without
-being twisted. For a valid cube, convert orientation digits to `0`, `1`, and
-`2`; their sum must be divisible by three. The solved code is
-`12345671111111`. `make check` uses the exchanged-corner example above.
-
-## Reading the solution
-
-```sh
-$ ./solver 21345671111111
-B' R' D2 R' B R B' R D2 B R'
-```
-
-Each token is one face turn. Apply them left to right; after the last one the
-cube is solved.
-
-| Token | Meaning |
-| :---: | :--- |
-| `R` | turn the `RIGHT` face 90° clockwise |
-| `B` | turn the `BACK` face 90° clockwise |
-| `D` | turn the `DOWN` face 90° clockwise |
-
-Clockwise means clockwise as seen by someone looking directly at that face from
-outside the cube, so you have to walk around to the back to read `B` and look up
-from underneath to read `D`. Two suffixes modify a turn:
-
-| Suffix | Meaning |
-| :---: | :--- |
-| none | 90° clockwise |
-| `'` | 90° counterclockwise, the inverse |
-| `2` | 180°, direction does not matter |
-
-`R`, `B`, and `D` are the only faces that appear, because turning `UP`, `FRONT`,
-or `LEFT` would move the anchor at position `0`. A turn counts as one move
-whichever suffix it carries, which is the half-turn metric; under that metric no
-position needs more than 11 moves. Solving an already-solved cube prints an
-empty line.
-
-See [`report.md`](report.md) for the model, algorithm, diagrams, and Frama-C
-validation notes.
+See [`report.md`](report.md) for their model and verification.
